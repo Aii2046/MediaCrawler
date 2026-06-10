@@ -31,7 +31,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
-from .routers import crawler_router, data_router, websocket_router
+from .routers import crawler_router, data_router, note_router, websocket_router
 
 app = FastAPI(
     title="MediaCrawler WebUI API",
@@ -59,6 +59,7 @@ app.add_middleware(
 # Register routers
 app.include_router(crawler_router, prefix="/api")
 app.include_router(data_router, prefix="/api")
+app.include_router(note_router, prefix="/api")
 app.include_router(websocket_router, prefix="/api")
 
 
@@ -74,6 +75,15 @@ async def serve_frontend():
         "docs": "/docs",
         "note": "WebUI not found, please build it first: cd webui && npm run build"
     }
+
+
+@app.get("/note")
+async def serve_note_page():
+    """Return note content fetcher page"""
+    note_path = os.path.join(WEBUI_DIR, "note.html")
+    if os.path.exists(note_path):
+        return FileResponse(note_path)
+    return {"message": "Note page not found"}
 
 
 @app.get("/api/health")
