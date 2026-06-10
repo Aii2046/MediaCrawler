@@ -26,12 +26,12 @@ import os
 import sys
 import subprocess
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
-from .routers import crawler_router, data_router, websocket_router
+from .routers import crawler_router, data_router, note_router, websocket_router
 
 app = FastAPI(
     title="MediaCrawler WebUI API",
@@ -59,6 +59,7 @@ app.add_middleware(
 # Register routers
 app.include_router(crawler_router, prefix="/api")
 app.include_router(data_router, prefix="/api")
+app.include_router(note_router, prefix="/api")
 app.include_router(websocket_router, prefix="/api")
 
 
@@ -74,6 +75,15 @@ async def serve_frontend():
         "docs": "/docs",
         "note": "WebUI not found, please build it first: cd webui && npm run build"
     }
+
+
+@app.get("/note-content")
+async def serve_note_content_page():
+    """Return note content fetch page"""
+    note_page_path = os.path.join(WEBUI_DIR, "note_content.html")
+    if os.path.exists(note_page_path):
+        return FileResponse(note_page_path)
+    raise HTTPException(status_code=404, detail="Note content page not found")
 
 
 @app.get("/api/health")

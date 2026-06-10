@@ -1,0 +1,924 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MediaCrawler - Note Content Fetch</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        /* ── Reset & Variables ── */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --cyber-bg-primary: 248 250 252;
+            --cyber-bg-secondary: 241 245 249;
+            --cyber-bg-tertiary: 226 232 240;
+            --cyber-bg-panel: 255 255 255;
+            --cyber-neon-cyan: 6 182 212;
+            --cyber-neon-pink: 236 72 153;
+            --cyber-neon-green: 34 197 94;
+            --cyber-neon-orange: 249 115 22;
+            --cyber-neon-purple: 168 85 247;
+            --cyber-text-primary: 15 23 42;
+            --cyber-text-secondary: 71 85 105;
+            --cyber-text-muted: 148 163 184;
+            --cyber-border-default: 203 213 225;
+            --cyber-border-subtle: 226 232 240;
+            --glass-bg: 255 255 255 / .85;
+            --glass-border: 203 213 225 / .5;
+            --radius: .375rem;
+            --shadow-glow-opacity: .2;
+        }
+
+        .dark {
+            --cyber-bg-primary: 10 10 15;
+            --cyber-bg-secondary: 13 17 23;
+            --cyber-bg-tertiary: 22 27 34;
+            --cyber-bg-panel: 28 33 40;
+            --cyber-neon-cyan: 0 255 255;
+            --cyber-neon-pink: 255 0 128;
+            --cyber-neon-green: 0 255 65;
+            --cyber-neon-orange: 255 152 0;
+            --cyber-neon-purple: 191 0 255;
+            --cyber-text-primary: 230 237 243;
+            --cyber-text-secondary: 139 148 158;
+            --cyber-text-muted: 72 79 88;
+            --cyber-border-default: 48 54 61;
+            --cyber-border-subtle: 33 38 45;
+            --glass-bg: 22 27 34 / .7;
+            --glass-border: 48 54 61 / .5;
+            --shadow-glow-opacity: .5;
+        }
+
+        body {
+            font-family: 'Inter', system-ui, sans-serif;
+            font-size: 15px;
+            line-height: 1.6;
+            background-color: rgb(var(--cyber-bg-primary));
+            color: rgb(var(--cyber-text-primary));
+            min-height: 100vh;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* ── Background Grid ── */
+        .cyber-grid {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            z-index: -1;
+            background-color: rgb(var(--cyber-bg-primary));
+            background-image:
+                linear-gradient(rgb(var(--cyber-neon-cyan) / .03) 1px, transparent 1px),
+                linear-gradient(90deg, rgb(var(--cyber-neon-cyan) / .03) 1px, transparent 1px),
+                radial-gradient(ellipse at 50% 0%, rgb(var(--cyber-neon-cyan) / .06) 0%, transparent 60%);
+            background-size: 50px 50px, 50px 50px, 100% 100%;
+            background-position: -1px -1px, -1px -1px, center top;
+        }
+        .dark .cyber-grid {
+            background-image:
+                linear-gradient(rgba(0,255,255,.02) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0,255,255,.02) 1px, transparent 1px),
+                radial-gradient(ellipse at 50% 0%, rgba(0,255,255,.08) 0%, transparent 60%);
+        }
+
+        /* ── Layout ── */
+        .container {
+            max-width: 960px;
+            margin: 0 auto;
+            padding: 2rem 1.5rem;
+        }
+
+        /* ── Header ── */
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 2rem;
+        }
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+        .header-logo {
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            object-fit: contain;
+        }
+        .header-title {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: rgb(var(--cyber-neon-cyan));
+            text-shadow: 0 1px 3px rgb(var(--cyber-neon-cyan) / .3);
+        }
+        .header-subtitle {
+            font-size: 0.75rem;
+            color: rgb(var(--cyber-text-muted));
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+        }
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.375rem;
+            padding: 0.375rem 0.75rem;
+            font-size: 0.8125rem;
+            color: rgb(var(--cyber-text-secondary));
+            text-decoration: none;
+            border: 1px solid rgb(var(--cyber-border-default));
+            border-radius: var(--radius);
+            transition: all 0.15s;
+            background: rgb(var(--glass-bg));
+        }
+        .back-link:hover {
+            color: rgb(var(--cyber-neon-cyan));
+            border-color: rgb(var(--cyber-neon-cyan) / .5);
+            box-shadow: 0 0 5px rgb(var(--cyber-neon-cyan) / .2);
+        }
+
+        /* ── Glass Panel ── */
+        .panel {
+            background: rgb(var(--glass-bg));
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgb(var(--glass-border));
+            border-radius: calc(var(--radius) * 2);
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            box-shadow: 0 0 1px rgb(var(--cyber-neon-cyan) / .5), 0 4px 20px rgba(0,0,0,.15);
+        }
+        .panel-title {
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: rgb(var(--cyber-neon-cyan));
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        .panel-title svg {
+            width: 16px;
+            height: 16px;
+        }
+
+        /* ── Form ── */
+        .form-group {
+            margin-bottom: 1rem;
+        }
+        .form-label {
+            display: block;
+            font-size: 0.8125rem;
+            font-weight: 500;
+            color: rgb(var(--cyber-text-secondary));
+            margin-bottom: 0.375rem;
+        }
+        .form-input {
+            width: 100%;
+            padding: 0.625rem 0.875rem;
+            font-size: 0.875rem;
+            font-family: 'JetBrains Mono', monospace;
+            color: rgb(var(--cyber-text-primary));
+            background: rgb(var(--cyber-bg-secondary));
+            border: 1px solid rgb(var(--cyber-border-default));
+            border-radius: var(--radius);
+            outline: none;
+            transition: all 0.15s;
+        }
+        .form-input:focus {
+            border-color: rgb(var(--cyber-neon-cyan));
+            box-shadow: 0 0 0 1px rgb(var(--cyber-neon-cyan)), 0 0 10px rgb(var(--cyber-neon-cyan) / .2);
+        }
+        .form-input::placeholder {
+            color: rgb(var(--cyber-text-muted));
+        }
+        .form-row {
+            display: flex;
+            gap: 0.75rem;
+            align-items: flex-end;
+        }
+        .form-row .form-group {
+            flex: 1;
+        }
+
+        /* ── Button ── */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            padding: 0.625rem 1.25rem;
+            font-size: 0.875rem;
+            font-weight: 600;
+            border: none;
+            border-radius: var(--radius);
+            cursor: pointer;
+            transition: all 0.15s;
+            white-space: nowrap;
+        }
+        .btn-primary {
+            color: #fff;
+            background: rgb(var(--cyber-neon-cyan));
+            box-shadow: 0 0 8px rgb(var(--cyber-neon-cyan) / .3);
+        }
+        .btn-primary:hover {
+            box-shadow: 0 0 16px rgb(var(--cyber-neon-cyan) / .5);
+            filter: brightness(1.1);
+        }
+        .btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            filter: none;
+        }
+        .btn svg {
+            width: 16px;
+            height: 16px;
+        }
+
+        /* ── Loading ── */
+        .loading-overlay {
+            display: none;
+            text-align: center;
+            padding: 2rem;
+        }
+        .loading-overlay.active {
+            display: block;
+        }
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid rgb(var(--cyber-border-default));
+            border-top-color: rgb(var(--cyber-neon-cyan));
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin: 0 auto 1rem;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .loading-text {
+            font-size: 0.875rem;
+            color: rgb(var(--cyber-text-muted));
+        }
+
+        /* ── Error ── */
+        .error-box {
+            display: none;
+            padding: 0.875rem 1rem;
+            background: rgb(var(--cyber-neon-pink) / .1);
+            border: 1px solid rgb(var(--cyber-neon-pink) / .3);
+            border-radius: var(--radius);
+            color: rgb(var(--cyber-neon-pink));
+            font-size: 0.8125rem;
+            margin-top: 1rem;
+        }
+        .error-box.active {
+            display: block;
+        }
+
+        /* ── Result ── */
+        .result-section {
+            display: none;
+        }
+        .result-section.active {
+            display: block;
+        }
+
+        /* Note Header */
+        .note-header {
+            display: flex;
+            align-items: flex-start;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+        .note-avatar {
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            border: 2px solid rgb(var(--cyber-neon-cyan) / .3);
+            object-fit: cover;
+            flex-shrink: 0;
+        }
+        .note-meta {
+            flex: 1;
+            min-width: 0;
+        }
+        .note-nickname {
+            font-size: 0.9375rem;
+            font-weight: 600;
+            color: rgb(var(--cyber-text-primary));
+        }
+        .note-time {
+            font-size: 0.75rem;
+            color: rgb(var(--cyber-text-muted));
+            font-family: 'JetBrains Mono', monospace;
+        }
+        .note-type-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+            padding: 0.125rem 0.5rem;
+            font-size: 0.6875rem;
+            font-weight: 600;
+            border-radius: 9999px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-left: 0.5rem;
+        }
+        .badge-normal {
+            background: rgb(var(--cyber-neon-green) / .15);
+            color: rgb(var(--cyber-neon-green));
+            border: 1px solid rgb(var(--cyber-neon-green) / .3);
+        }
+        .badge-video {
+            background: rgb(var(--cyber-neon-purple) / .15);
+            color: rgb(var(--cyber-neon-purple));
+            border: 1px solid rgb(var(--cyber-neon-purple) / .3);
+        }
+
+        /* Title */
+        .note-title {
+            font-size: 1.125rem;
+            font-weight: 700;
+            color: rgb(var(--cyber-text-primary));
+            line-height: 1.4;
+            margin-bottom: 0.75rem;
+        }
+
+        /* Description */
+        .note-desc {
+            font-size: 0.875rem;
+            color: rgb(var(--cyber-text-secondary));
+            line-height: 1.7;
+            white-space: pre-wrap;
+            word-break: break-word;
+            margin-bottom: 1rem;
+            padding: 0.875rem;
+            background: rgb(var(--cyber-bg-secondary));
+            border-radius: var(--radius);
+            border-left: 3px solid rgb(var(--cyber-neon-cyan) / .5);
+        }
+
+        /* Stats */
+        .note-stats {
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+            margin-bottom: 1rem;
+        }
+        .stat-item {
+            display: flex;
+            align-items: center;
+            gap: 0.375rem;
+            padding: 0.375rem 0.75rem;
+            background: rgb(var(--cyber-bg-tertiary) / .5);
+            border-radius: var(--radius);
+            font-size: 0.8125rem;
+            color: rgb(var(--cyber-text-secondary));
+        }
+        .stat-item svg {
+            width: 14px;
+            height: 14px;
+        }
+        .stat-value {
+            font-weight: 600;
+            color: rgb(var(--cyber-neon-cyan));
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        /* Tags */
+        .note-tags {
+            display: flex;
+            gap: 0.375rem;
+            flex-wrap: wrap;
+            margin-bottom: 1rem;
+        }
+        .tag {
+            padding: 0.125rem 0.5rem;
+            font-size: 0.75rem;
+            background: rgb(var(--cyber-neon-cyan) / .1);
+            color: rgb(var(--cyber-neon-cyan));
+            border: 1px solid rgb(var(--cyber-neon-cyan) / .2);
+            border-radius: 9999px;
+        }
+
+        /* Images Gallery */
+        .images-section-title {
+            font-size: 0.8125rem;
+            font-weight: 600;
+            color: rgb(var(--cyber-text-secondary));
+            margin-bottom: 0.75rem;
+            display: flex;
+            align-items: center;
+            gap: 0.375rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        .images-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 0.75rem;
+            margin-bottom: 1rem;
+        }
+        .image-card {
+            position: relative;
+            border-radius: var(--radius);
+            overflow: hidden;
+            border: 1px solid rgb(var(--cyber-border-subtle));
+            cursor: pointer;
+            transition: all 0.2s;
+            aspect-ratio: 1;
+            background: rgb(var(--cyber-bg-tertiary));
+        }
+        .image-card:hover {
+            border-color: rgb(var(--cyber-neon-cyan) / .5);
+            box-shadow: 0 0 12px rgb(var(--cyber-neon-cyan) / .2);
+            transform: translateY(-2px);
+        }
+        .image-card img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .image-card .img-error {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            height: 100%;
+            font-size: 0.75rem;
+            color: rgb(var(--cyber-text-muted));
+        }
+
+        /* Video */
+        .video-section {
+            margin-bottom: 1rem;
+        }
+        .video-container {
+            border-radius: var(--radius);
+            overflow: hidden;
+            border: 1px solid rgb(var(--cyber-border-subtle));
+            background: #000;
+        }
+        .video-container video {
+            width: 100%;
+            max-height: 500px;
+            display: block;
+        }
+        .video-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.375rem;
+            padding: 0.5rem 1rem;
+            font-size: 0.8125rem;
+            color: rgb(var(--cyber-neon-cyan));
+            text-decoration: none;
+            border: 1px solid rgb(var(--cyber-neon-cyan) / .3);
+            border-radius: var(--radius);
+            transition: all 0.15s;
+            margin-top: 0.5rem;
+        }
+        .video-link:hover {
+            background: rgb(var(--cyber-neon-cyan) / .1);
+            box-shadow: 0 0 8px rgb(var(--cyber-neon-cyan) / .2);
+        }
+
+        /* Lightbox */
+        .lightbox {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            z-index: 1000;
+            background: rgba(0, 0, 0, 0.9);
+            align-items: center;
+            justify-content: center;
+            cursor: zoom-out;
+        }
+        .lightbox.active {
+            display: flex;
+        }
+        .lightbox img {
+            max-width: 90vw;
+            max-height: 90vh;
+            object-fit: contain;
+            border-radius: 4px;
+        }
+        .lightbox-close {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            width: 36px;
+            height: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            font-size: 1.5rem;
+            cursor: pointer;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.1);
+            border: none;
+            transition: background 0.15s;
+        }
+        .lightbox-close:hover {
+            background: rgba(255,255,255,0.2);
+        }
+        .lightbox-nav {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 44px;
+            height: 44px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            font-size: 1.25rem;
+            cursor: pointer;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.1);
+            border: none;
+            transition: background 0.15s;
+        }
+        .lightbox-nav:hover { background: rgba(255,255,255,0.25); }
+        .lightbox-prev { left: 1rem; }
+        .lightbox-next { right: 1rem; }
+        .lightbox-counter {
+            position: absolute;
+            bottom: 1rem;
+            left: 50%;
+            transform: translateX(-50%);
+            color: rgba(255,255,255,0.7);
+            font-size: 0.8125rem;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        /* ── Scrollbar ── */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: rgb(var(--cyber-bg-secondary)); }
+        ::-webkit-scrollbar-thumb {
+            background: linear-gradient(180deg, rgb(var(--cyber-neon-cyan) / .4), rgb(var(--cyber-neon-pink) / .3));
+        }
+
+        /* ── Selection ── */
+        ::selection { background: rgb(var(--cyber-neon-cyan) / .3); }
+
+        /* ── Responsive ── */
+        @media (max-width: 640px) {
+            .container { padding: 1rem; }
+            .form-row { flex-direction: column; }
+            .images-grid { grid-template-columns: repeat(2, 1fr); }
+            .note-stats { gap: 0.5rem; }
+        }
+    </style>
+</head>
+<body>
+    <div class="cyber-grid"></div>
+
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <div class="header-left">
+                <img src="/logos/xiaohongshu.svg" alt="XHS" class="header-logo"
+                     onerror="this.style.display='none'">
+                <div>
+                    <div class="header-title">Note Content Fetch</div>
+                    <div class="header-subtitle">MediaCrawler / Xiaohongshu</div>
+                </div>
+            </div>
+            <a href="/" class="back-link">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                Back
+            </a>
+        </div>
+
+        <!-- Input Panel -->
+        <div class="panel">
+            <div class="panel-title">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                Note URL
+            </div>
+            <form id="fetchForm" onsubmit="handleFetch(event)">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label" for="noteUrl">Xiaohongshu Note URL</label>
+                        <input
+                            type="text"
+                            id="noteUrl"
+                            class="form-input"
+                            placeholder="https://www.xiaohongshu.com/explore/..."
+                            required
+                            autocomplete="off"
+                        >
+                    </div>
+                    <button type="submit" class="btn btn-primary" id="fetchBtn">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                        Fetch
+                    </button>
+                </div>
+                <div class="form-group" style="margin-top: 0.75rem;">
+                    <label class="form-label" for="cookiesInput">Cookies (optional, for authenticated access)</label>
+                    <input
+                        type="text"
+                        id="cookiesInput"
+                        class="form-input"
+                        placeholder="web_session=xxx; ..."
+                        autocomplete="off"
+                    >
+                </div>
+            </form>
+            <div class="error-box" id="errorBox"></div>
+        </div>
+
+        <!-- Loading -->
+        <div class="loading-overlay" id="loadingOverlay">
+            <div class="spinner"></div>
+            <div class="loading-text">Fetching note content...</div>
+        </div>
+
+        <!-- Result -->
+        <div class="result-section" id="resultSection">
+            <!-- Note Info Panel -->
+            <div class="panel" id="noteInfoPanel">
+                <div class="panel-title">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
+                    Note Content
+                </div>
+
+                <div class="note-header" id="noteHeader"></div>
+                <div class="note-title" id="noteTitle"></div>
+                <div class="note-desc" id="noteDesc"></div>
+                <div class="note-stats" id="noteStats"></div>
+                <div class="note-tags" id="noteTags"></div>
+            </div>
+
+            <!-- Images Panel -->
+            <div class="panel" id="imagesPanel" style="display:none;">
+                <div class="panel-title">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
+                    Images (<span id="imageCount">0</span>)
+                </div>
+                <div class="images-grid" id="imagesGrid"></div>
+            </div>
+
+            <!-- Video Panel -->
+            <div class="panel" id="videoPanel" style="display:none;">
+                <div class="panel-title">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 8-6 4 6 4V8Z"/><rect width="14" height="12" x="2" y="6" rx="2" ry="2"/></svg>
+                    Video
+                </div>
+                <div class="video-section" id="videoSection"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Lightbox -->
+    <div class="lightbox" id="lightbox" onclick="closeLightbox(event)">
+        <button class="lightbox-close" onclick="closeLightbox(event)">&times;</button>
+        <button class="lightbox-nav lightbox-prev" onclick="navLightbox(-1, event)">&#8249;</button>
+        <img id="lightboxImg" src="" alt="">
+        <button class="lightbox-nav lightbox-next" onclick="navLightbox(1, event)">&#8250;</button>
+        <div class="lightbox-counter" id="lightboxCounter"></div>
+    </div>
+
+    <script>
+        // ── State ──
+        let currentImages = [];
+        let lightboxIndex = 0;
+
+        // ── Helpers ──
+        function formatTimestamp(ts) {
+            if (!ts) return '';
+            const d = new Date(ts);
+            if (isNaN(d)) return '';
+            return d.toLocaleDateString('zh-CN', {
+                year: 'numeric', month: '2-digit', day: '2-digit',
+                hour: '2-digit', minute: '2-digit'
+            });
+        }
+
+        function escapeHtml(str) {
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+
+        function proxyUrl(url) {
+            if (!url) return '';
+            return '/api/note/media-proxy?url=' + encodeURIComponent(url);
+        }
+
+        // ── Fetch Handler ──
+        async function handleFetch(e) {
+            e.preventDefault();
+
+            const url = document.getElementById('noteUrl').value.trim();
+            const cookies = document.getElementById('cookiesInput').value.trim();
+            const fetchBtn = document.getElementById('fetchBtn');
+            const loadingOverlay = document.getElementById('loadingOverlay');
+            const errorBox = document.getElementById('errorBox');
+            const resultSection = document.getElementById('resultSection');
+
+            // Reset
+            errorBox.classList.remove('active');
+            resultSection.classList.remove('active');
+            loadingOverlay.classList.add('active');
+            fetchBtn.disabled = true;
+
+            try {
+                const response = await fetch('/api/note/fetch', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        url: url,
+                        cookies: cookies,
+                        international: false,
+                    }),
+                });
+
+                const result = await response.json();
+
+                if (!result.success) {
+                    throw new Error(result.error || 'Unknown error');
+                }
+
+                renderNoteContent(result.data);
+            } catch (err) {
+                errorBox.textContent = err.message || 'Failed to fetch note content';
+                errorBox.classList.add('active');
+            } finally {
+                loadingOverlay.classList.remove('active');
+                fetchBtn.disabled = false;
+            }
+        }
+
+        // ── Render Note Content ──
+        function renderNoteContent(data) {
+            const resultSection = document.getElementById('resultSection');
+
+            // Header
+            const noteHeader = document.getElementById('noteHeader');
+            const avatarUrl = data.user?.avatar || '';
+            const nickname = data.user?.nickname || 'Unknown';
+            const timeStr = formatTimestamp(data.time);
+            const typeBadge = data.type === 'video'
+                ? '<span class="note-type-badge badge-video">VIDEO</span>'
+                : '<span class="note-type-badge badge-normal">NORMAL</span>';
+
+            noteHeader.innerHTML = `
+                ${avatarUrl ? `<img class="note-avatar" src="${escapeHtml(avatarUrl)}" alt="${escapeHtml(nickname)}" onerror="this.style.display='none'">` : ''}
+                <div class="note-meta">
+                    <div class="note-nickname">${escapeHtml(nickname)} ${typeBadge}</div>
+                    <div class="note-time">${escapeHtml(timeStr)}${data.ip_location ? ' | ' + escapeHtml(data.ip_location) : ''}</div>
+                </div>
+            `;
+
+            // Title
+            const noteTitle = document.getElementById('noteTitle');
+            noteTitle.textContent = data.title || '';
+            noteTitle.style.display = data.title ? 'block' : 'none';
+
+            // Description
+            const noteDesc = document.getElementById('noteDesc');
+            noteDesc.textContent = data.desc || '';
+            noteDesc.style.display = data.desc ? 'block' : 'none';
+
+            // Stats
+            const noteStats = document.getElementById('noteStats');
+            const interact = data.interact_info || {};
+            noteStats.innerHTML = `
+                <div class="stat-item">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>
+                    <span class="stat-value">${escapeHtml(String(interact.liked_count || '0'))}</span>
+                </div>
+                <div class="stat-item">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/></svg>
+                    <span class="stat-value">${escapeHtml(String(interact.collected_count || '0'))}</span>
+                </div>
+                <div class="stat-item">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                    <span class="stat-value">${escapeHtml(String(interact.comment_count || '0'))}</span>
+                </div>
+                <div class="stat-item">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+                    <span class="stat-value">${escapeHtml(String(interact.share_count || '0'))}</span>
+                </div>
+            `;
+
+            // Tags
+            const noteTags = document.getElementById('noteTags');
+            if (data.tags && data.tags.length > 0) {
+                noteTags.innerHTML = data.tags
+                    .map(t => `<span class="tag">#${escapeHtml(t)}</span>`)
+                    .join('');
+                noteTags.style.display = 'flex';
+            } else {
+                noteTags.style.display = 'none';
+            }
+
+            // Images
+            const imagesPanel = document.getElementById('imagesPanel');
+            const imagesGrid = document.getElementById('imagesGrid');
+            const imageCount = document.getElementById('imageCount');
+            currentImages = [];
+
+            if (data.images && data.images.length > 0) {
+                currentImages = data.images.map(img => img.url);
+                imageCount.textContent = data.images.length;
+
+                imagesGrid.innerHTML = data.images.map((img, idx) => `
+                    <div class="image-card" onclick="openLightbox(${idx})">
+                        <img
+                            src="${escapeHtml(proxyUrl(img.url))}"
+                            alt="Image ${idx + 1}"
+                            loading="lazy"
+                            onerror="this.parentElement.innerHTML='<div class=img-error>Failed to load</div>'"
+                        >
+                    </div>
+                `).join('');
+
+                imagesPanel.style.display = 'block';
+            } else {
+                imagesPanel.style.display = 'none';
+            }
+
+            // Video
+            const videoPanel = document.getElementById('videoPanel');
+            const videoSection = document.getElementById('videoSection');
+
+            if (data.video_url) {
+                const proxiedVideoUrl = proxyUrl(data.video_url);
+                videoSection.innerHTML = `
+                    <div class="video-container">
+                        <video controls preload="metadata" playsinline>
+                            <source src="${escapeHtml(proxiedVideoUrl)}" type="video/mp4">
+                            Your browser does not support video playback.
+                        </video>
+                    </div>
+                    <a href="${escapeHtml(data.video_url)}" target="_blank" rel="noopener" class="video-link">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                        Open original video URL
+                    </a>
+                `;
+                videoPanel.style.display = 'block';
+            } else {
+                videoPanel.style.display = 'none';
+            }
+
+            resultSection.classList.add('active');
+        }
+
+        // ── Lightbox ──
+        function openLightbox(idx) {
+            lightboxIndex = idx;
+            updateLightboxImage();
+            document.getElementById('lightbox').classList.add('active');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeLightbox(e) {
+            if (e) e.stopPropagation();
+            document.getElementById('lightbox').classList.remove('active');
+            document.body.style.overflow = '';
+        }
+
+        function navLightbox(dir, e) {
+            if (e) e.stopPropagation();
+            lightboxIndex = (lightboxIndex + dir + currentImages.length) % currentImages.length;
+            updateLightboxImage();
+        }
+
+        function updateLightboxImage() {
+            const img = document.getElementById('lightboxImg');
+            img.src = proxyUrl(currentImages[lightboxIndex]);
+            document.getElementById('lightboxCounter').textContent =
+                `${lightboxIndex + 1} / ${currentImages.length}`;
+        }
+
+        // Keyboard navigation
+        document.addEventListener('keydown', (e) => {
+            const lb = document.getElementById('lightbox');
+            if (!lb.classList.contains('active')) return;
+            if (e.key === 'Escape') closeLightbox();
+            if (e.key === 'ArrowLeft') navLightbox(-1);
+            if (e.key === 'ArrowRight') navLightbox(1);
+        });
+
+        // ── Auto-fill test URL from query param ──
+        (function() {
+            const params = new URLSearchParams(window.location.search);
+            const testUrl = params.get('url');
+            if (testUrl) {
+                document.getElementById('noteUrl').value = testUrl;
+            }
+        })();
+
+        // ── Dark mode detection ──
+        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+            document.documentElement.classList.add('dark');
+        }
+    </script>
+</body>
+</html>

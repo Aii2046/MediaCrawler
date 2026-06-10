@@ -13,5 +13,50 @@
   </head>
   <body>
     <div id="root"></div>
+    <!-- Note Content Fetch Entry -->
+    <a href="/note-content" id="note-fetch-entry" title="Note Content Fetch - Fetch XHS note images, text, and video">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
+      </svg>
+      <span>Note Fetch</span>
+    </a>
+    <style>
+      #note-fetch-entry {
+        position: fixed;
+        bottom: 1.5rem;
+        right: 1.5rem;
+        z-index: 999;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.625rem 1rem;
+        font-family: 'Inter', system-ui, sans-serif;
+        font-size: 0.8125rem;
+        font-weight: 600;
+        color: #fff;
+        background: rgb(6 182 212);
+        border-radius: 9999px;
+        text-decoration: none;
+        box-shadow: 0 0 12px rgba(6,182,212,0.4), 0 4px 16px rgba(0,0,0,0.15);
+        transition: all 0.2s ease;
+        cursor: pointer;
+      }
+      #note-fetch-entry:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 0 20px rgba(6,182,212,0.6), 0 8px 24px rgba(0,0,0,0.2);
+      }
+      #note-fetch-entry svg {
+        width: 16px;
+        height: 16px;
+      }
+      .dark #note-fetch-entry {
+        background: rgb(0 255 255);
+        color: rgb(10 10 15);
+        box-shadow: 0 0 12px rgba(0,255,255,0.5), 0 4px 16px rgba(0,0,0,0.4);
+      }
+      .dark #note-fetch-entry:hover {
+        box-shadow: 0 0 24px rgba(0,255,255,0.7), 0 8px 24px rgba(0,0,0,0.5);
+      }
+    </style>
   </body>
 </html>
