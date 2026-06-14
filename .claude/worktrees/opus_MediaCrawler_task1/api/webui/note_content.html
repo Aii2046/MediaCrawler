@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MediaCrawler - Note Content Fetcher</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Inter', sans-serif; background: #0f1117; color: #e1e1e6; min-height: 100vh; }
+        .header { background: #16181d; border-bottom: 1px solid #2a2d35; padding: 16px 24px; display: flex; align-items: center; gap: 16px; }
+        .header h1 { font-size: 18px; font-weight: 600; }
+        .header a { color: #7c8aff; text-decoration: none; font-size: 14px; }
+        .header a:hover { text-decoration: underline; }
+        .container { max-width: 960px; margin: 0 auto; padding: 24px; }
+        .card { background: #16181d; border: 1px solid #2a2d35; border-radius: 12px; padding: 24px; margin-bottom: 20px; }
+        .card h2 { font-size: 16px; font-weight: 600; margin-bottom: 16px; color: #fff; }
+        label { display: block; font-size: 13px; font-weight: 500; color: #9ca3af; margin-bottom: 6px; }
+        input[type="text"], textarea {
+            width: 100%; padding: 10px 14px; background: #0f1117; border: 1px solid #2a2d35;
+            border-radius: 8px; color: #e1e1e6; font-size: 14px; font-family: inherit;
+            transition: border-color 0.2s;
+        }
+        input[type="text"]:focus, textarea:focus { outline: none; border-color: #7c8aff; }
+        textarea { resize: vertical; min-height: 80px; }
+        .controls { display: flex; align-items: center; gap: 16px; margin-top: 16px; }
+        .checkbox-wrap { display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 14px; }
+        .checkbox-wrap input { accent-color: #7c8aff; width: 16px; height: 16px; }
+        .btn {
+            padding: 10px 24px; border: none; border-radius: 8px; font-size: 14px; font-weight: 600;
+            cursor: pointer; transition: all 0.2s;
+        }
+        .btn-primary { background: #7c8aff; color: #fff; }
+        .btn-primary:hover { background: #6b7bff; }
+        .btn-primary:disabled { background: #3a3d4a; color: #6b7280; cursor: not-allowed; }
+        .btn-secondary { background: #2a2d35; color: #e1e1e6; border: 1px solid #3a3d45; }
+        .btn-secondary:hover { background: #353840; }
+        .btn-secondary:disabled { background: #1a1c23; color: #6b7280; cursor: not-allowed; }
+        .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid #fff4; border-top-color: #fff; border-radius: 50%; animation: spin 0.6s linear infinite; margin-right: 8px; vertical-align: middle; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .status { margin-top: 16px; padding: 12px 16px; border-radius: 8px; font-size: 14px; display: none; }
+        .status.error { display: block; background: #2d1b1b; border: 1px solid #5c2626; color: #f87171; }
+        .status.success { display: block; background: #1b2d1b; border: 1px solid #265c26; color: #6ee7b7; }
+        .status.info { display: block; background: #1b1b2d; border: 1px solid #26265c; color: #93c5fd; }
+        .note-card { background: #1a1c23; border: 1px solid #2a2d35; border-radius: 12px; padding: 20px; margin-bottom: 16px; }
+        .note-header { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+        .note-avatar { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; background: #2a2d35; }
+        .note-author { font-weight: 600; font-size: 14px; }
+        .note-type { font-size: 12px; padding: 2px 8px; border-radius: 4px; background: #2a2d35; color: #9ca3af; margin-left: auto; }
+        .note-title { font-size: 18px; font-weight: 700; margin-bottom: 8px; color: #fff; }
+        .note-desc { font-size: 14px; line-height: 1.6; color: #c9cdd4; margin-bottom: 16px; white-space: pre-wrap; word-break: break-word; }
+        .note-stats { display: flex; gap: 20px; margin-bottom: 16px; font-size: 13px; color: #9ca3af; }
+        .note-stats span { display: flex; align-items: center; gap: 4px; }
+        .note-tags { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+        .note-tags .tag { font-size: 12px; padding: 4px 10px; border-radius: 12px; background: #252830; color: #7c8aff; }
+        .image-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; margin-bottom: 16px; }
+        .image-grid img { width: 100%; border-radius: 8px; cursor: pointer; transition: transform 0.2s; aspect-ratio: 1; object-fit: cover; background: #2a2d35; }
+        .image-grid img:hover { transform: scale(1.02); }
+        .video-wrap { margin-bottom: 16px; }
+        .video-wrap video { width: 100%; max-height: 500px; border-radius: 8px; background: #000; }
+        .note-meta { font-size: 12px; color: #6b7280; }
+        .errors-list { margin-top: 12px; }
+        .errors-list li { color: #f87171; font-size: 13px; margin-bottom: 4px; }
+        .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 1000; justify-content: center; align-items: center; cursor: pointer; }
+        .modal-overlay.active { display: flex; }
+        .modal-overlay img { max-width: 90vw; max-height: 90vh; border-radius: 8px; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Note Content Fetcher</h1>
+        <a href="/">Back to Dashboard</a>
+    </div>
+
+    <div class="container">
+        <div class="card">
+            <h2>Fetch Note Content</h2>
+            <div style="margin-bottom: 14px;">
+                <label for="cookies">Cookies (must contain a1)</label>
+                <div style="display: flex; gap: 8px;">
+                    <input type="text" id="cookies" placeholder="a1=xxx; webId=xxx; web_session=xxx; ..." style="flex:1;">
+                    <button class="btn btn-secondary" id="autoFetchBtn" onclick="autoFetchCookies()" title="Connect to Chrome via CDP (port 9222) and extract cookies">Auto-fetch from Browser</button>
+                </div>
+            </div>
+            <div>
+                <label for="noteUrls">Note URLs (one per line)</label>
+                <textarea id="noteUrls" placeholder="https://www.xiaohongshu.com/explore/xxxxx?xsec_token=xxx&xsec_source=xxx"></textarea>
+            </div>
+            <div class="controls">
+                <label class="checkbox-wrap">
+                    <input type="checkbox" id="downloadMedia">
+                    Download media files
+                </label>
+                <button class="btn btn-primary" id="fetchBtn" onclick="fetchNotes()">Fetch</button>
+            </div>
+            <div class="status" id="statusMsg"></div>
+        </div>
+
+        <div id="results"></div>
+    </div>
+
+    <div class="modal-overlay" id="imageModal" onclick="this.classList.remove('active')">
+        <img id="modalImage" src="" alt="">
+    </div>
+
+    <script>
+        // Restore cookies from localStorage
+        const cookieInput = document.getElementById('cookies');
+        const saved = localStorage.getItem('mc_note_cookies');
+        if (saved) cookieInput.value = saved;
+        cookieInput.addEventListener('input', () => {
+            localStorage.setItem('mc_note_cookies', cookieInput.value);
+        });
+
+        async function autoFetchCookies() {
+            const btn = document.getElementById('autoFetchBtn');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner"></span>Connecting...';
+            hideStatus();
+            try {
+                const resp = await fetch('/api/note/cookies');
+                const data = await resp.json();
+                if (resp.ok && data.success) {
+                    cookieInput.value = data.cookies;
+                    localStorage.setItem('mc_note_cookies', data.cookies);
+                    showStatus('Cookies fetched from browser successfully', 'success');
+                } else {
+                    showStatus(data.detail || 'Failed to fetch cookies', 'error');
+                }
+            } catch (e) {
+                showStatus('Failed to connect: ' + e.message, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Auto-fetch from Browser';
+            }
+        }
+
+        function showStatus(msg, type) {
+            const el = document.getElementById('statusMsg');
+            el.textContent = msg;
+            el.className = 'status ' + type;
+        }
+
+        function hideStatus() {
+            document.getElementById('statusMsg').className = 'status';
+        }
+
+        function showImage(url) {
+            document.getElementById('modalImage').src = url;
+            document.getElementById('imageModal').classList.add('active');
+        }
+
+        async function fetchNotes() {
+            const cookies = cookieInput.value.trim();
+            const urls = document.getElementById('noteUrls').value.trim().split('\n').filter(u => u.trim());
+            const downloadMedia = document.getElementById('downloadMedia').checked;
+            const btn = document.getElementById('fetchBtn');
+
+            if (!cookies) { showStatus('Please enter cookies', 'error'); return; }
+            if (!urls.length) { showStatus('Please enter at least one note URL', 'error'); return; }
+
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner"></span>Fetching...';
+            hideStatus();
+            document.getElementById('results').innerHTML = '';
+
+            try {
+                const resp = await fetch('/api/note/fetch', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ note_urls: urls, cookies, download_media: downloadMedia }),
+                });
+
+                if (resp.status === 400) {
+                    const err = await resp.json();
+                    showStatus(err.detail || 'Bad request', 'error');
+                    return;
+                }
+
+                const data = await resp.json();
+                showStatus(data.message, data.success ? 'success' : 'error');
+                renderResults(data);
+            } catch (e) {
+                showStatus('Request failed: ' + e.message, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Fetch';
+            }
+        }
+
+        function renderResults(data) {
+            const container = document.getElementById('results');
+            let html = '';
+
+            if (data.errors && data.errors.length > 0) {
+                html += '<div class="card"><h2>Errors</h2><ul class="errors-list">';
+                data.errors.forEach(e => { html += '<li>' + escapeHtml(e) + '</li>'; });
+                html += '</ul></div>';
+            }
+
+            data.notes.forEach(note => {
+                html += '<div class="note-card">';
+
+                // Header
+                html += '<div class="note-header">';
+                if (note.user.avatar) {
+                    html += '<img class="note-avatar" src="' + escapeAttr(note.user.avatar) + '" alt="">';
+                }
+                html += '<span class="note-author">' + escapeHtml(note.user.nickname) + '</span>';
+                html += '<span class="note-type">' + (note.note_type === 'video' ? 'Video' : 'Image') + '</span>';
+                html += '</div>';
+
+                // Title & description
+                if (note.title) html += '<div class="note-title">' + escapeHtml(note.title) + '</div>';
+                if (note.description) html += '<div class="note-desc">' + escapeHtml(note.description) + '</div>';
+
+                // Stats
+                html += '<div class="note-stats">';
+                html += '<span>&#10084; ' + note.interact_info.liked_count + '</span>';
+                html += '<span>&#9733; ' + note.interact_info.collected_count + '</span>';
+                html += '<span>&#128172; ' + note.interact_info.comment_count + '</span>';
+                html += '<span>&#8618; ' + note.interact_info.share_count + '</span>';
+                html += '</div>';
+
+                // Tags
+                if (note.tags && note.tags.length > 0) {
+                    html += '<div class="note-tags">';
+                    note.tags.forEach(t => { html += '<span class="tag">#' + escapeHtml(t) + '</span>'; });
+                    html += '</div>';
+                }
+
+                // Images
+                if (note.images && note.images.length > 0) {
+                    html += '<div class="image-grid">';
+                    note.images.forEach(img => {
+                        const src = img.filename
+                            ? '/api/note/media/' + note.note_id + '/' + img.filename
+                            : img.url;
+                        html += '<img src="' + escapeAttr(src) + '" onclick="showImage(\'' + escapeAttr(img.url) + '\')" loading="lazy" alt="">';
+                    });
+                    html += '</div>';
+                }
+
+                // Video
+                if (note.video && note.video.urls && note.video.urls.length > 0) {
+                    const videoSrc = note.video.filename
+                        ? '/api/note/media/' + note.note_id + '/' + note.video.filename
+                        : note.video.urls[0];
+                    html += '<div class="video-wrap"><video controls preload="metadata">';
+                    html += '<source src="' + escapeAttr(videoSrc) + '" type="video/mp4">';
+                    html += '</video></div>';
+                }
+
+                // Meta
+                const meta = [];
+                if (note.ip_location) meta.push(note.ip_location);
+                if (note.time) meta.push(new Date(note.time).toLocaleString());
+                if (meta.length) html += '<div class="note-meta">' + escapeHtml(meta.join(' | ')) + '</div>';
+
+                html += '</div>';
+            });
+
+            container.innerHTML = html;
+        }
+
+        function escapeHtml(s) {
+            const d = document.createElement('div');
+            d.textContent = s || '';
+            return d.innerHTML;
+        }
+        function escapeAttr(s) {
+            return (s || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/</g,'&lt;');
+        }
+    </script>
+</body>
+</html>
