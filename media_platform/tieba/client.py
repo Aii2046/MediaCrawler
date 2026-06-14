@@ -31,6 +31,7 @@ import config
 from base.base_crawler import AbstractApiClient
 from model.m_baidu_tieba import TiebaComment, TiebaCreator, TiebaNote
 from proxy.proxy_ip_pool import ProxyIpPool
+from proxy.proxy_mixin import ProxyRefreshMixin
 from tools import utils
 
 from .field import SearchNoteType, SearchSortType
@@ -39,7 +40,7 @@ from .help import TieBaExtractor
 PC_SIGN_SECRET = "36770b1f34c9bbf2e7d1a99d2b82fa9e"
 
 
-class BaiduTieBaClient(AbstractApiClient):
+class BaiduTieBaClient(AbstractApiClient, ProxyRefreshMixin):
 
     def __init__(
         self,
@@ -59,9 +60,10 @@ class BaiduTieBaClient(AbstractApiClient):
         self._host = "https://tieba.baidu.com"
         self.cookie_urls = [self._host]
         self._page_extractor = TieBaExtractor()
-        self.default_ip_proxy = default_ip_proxy
+        self.proxy = default_ip_proxy
         self.playwright_page = playwright_page  # Playwright page object
         self._pc_tbs = ""
+        self.init_proxy_pool(ip_pool)
 
     @staticmethod
     def _sign_pc_params(params: Dict[str, Any]) -> str:
@@ -215,24 +217,6 @@ class BaiduTieBaClient(AbstractApiClient):
         )
         return response
 
-    async def _refresh_proxy_if_expired(self) -> None:
-        """
-        Check if proxy is expired and automatically refresh if necessary
-        """
-        if self.ip_pool is None:
-            return
-
-        if self.ip_pool.is_current_proxy_expired():
-            utils.logger.info(
-                "[BaiduTieBaClient._refresh_proxy_if_expired] Proxy expired, refreshing..."
-            )
-            new_proxy = await self.ip_pool.get_or_refresh_proxy()
-            # Update proxy URL
-            _, self.default_ip_proxy = utils.format_proxy_info(new_proxy)
-            utils.logger.info(
-                f"[BaiduTieBaClient._refresh_proxy_if_expired] New proxy: {new_proxy.ip}:{new_proxy.port}"
-            )
-
     @retry(stop=stop_after_attempt(3), wait=wait_fixed(1))
     async def request(self, method, url, return_ori_content=False, proxy=None, **kwargs) -> Union[str, Any]:
         """
@@ -250,7 +234,7 @@ class BaiduTieBaClient(AbstractApiClient):
         # Check if proxy is expired before each request
         await self._refresh_proxy_if_expired()
 
-        actual_proxy = proxy if proxy else self.default_ip_proxy
+        actual_proxy = proxy if proxy else self.proxy
 
         # Execute synchronous requests in thread pool
         response = await asyncio.to_thread(
@@ -298,7 +282,7 @@ class BaiduTieBaClient(AbstractApiClient):
                 proxie_model = await self.ip_pool.get_proxy()
                 _, proxy = utils.format_proxy_info(proxie_model)
                 res = await self.request(method="GET", url=f"{self._host}{final_uri}", return_ori_content=return_ori_content, proxy=proxy, **kwargs)
-                self.default_ip_proxy = proxy
+                self.proxy = proxy
                 return res
 
             utils.logger.error(f"[BaiduTieBaClient.get] Reached maximum retry attempts, IP is blocked, please try a new IP proxy: {e}")

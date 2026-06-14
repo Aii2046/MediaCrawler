@@ -30,10 +30,9 @@ from tools.httpx_util import make_async_client
 from tenacity import retry, stop_after_attempt, wait_fixed
 
 import config
-from base.base_crawler import AbstractApiClient
+from base.base_crawler import BasePlatformClient
 from constant import zhihu as zhihu_constant
 from model.m_zhihu import ZhihuComment, ZhihuContent, ZhihuCreator
-from proxy.proxy_mixin import ProxyRefreshMixin
 from tools import utils
 
 if TYPE_CHECKING:
@@ -44,7 +43,7 @@ from .field import SearchSort, SearchTime, SearchType
 from .help import ZhihuExtractor, sign
 
 
-class ZhiHuClient(AbstractApiClient, ProxyRefreshMixin):
+class ZhiHuClient(BasePlatformClient):
 
     def __init__(
         self,
@@ -56,14 +55,16 @@ class ZhiHuClient(AbstractApiClient, ProxyRefreshMixin):
         cookie_dict: Dict[str, str],
         proxy_ip_pool: Optional["ProxyIpPool"] = None,
     ):
-        self.proxy = proxy
-        self.timeout = timeout
-        self.default_headers = headers
         self.cookie_urls = ["https://www.zhihu.com"]
-        self.cookie_dict = cookie_dict
         self._extractor = ZhihuExtractor()
-        # Initialize proxy pool (from ProxyRefreshMixin)
-        self.init_proxy_pool(proxy_ip_pool)
+        super().__init__(
+            timeout=timeout,
+            proxy=proxy,
+            headers=headers,
+            playwright_page=playwright_page,
+            cookie_dict=cookie_dict,
+            proxy_ip_pool=proxy_ip_pool,
+        )
 
     async def _pre_headers(self, url: str) -> Dict:
         """
@@ -76,8 +77,8 @@ class ZhiHuClient(AbstractApiClient, ProxyRefreshMixin):
         d_c0 = self.cookie_dict.get("d_c0")
         if not d_c0:
             raise Exception("d_c0 not found in cookies")
-        sign_res = sign(url, self.default_headers["cookie"])
-        headers = self.default_headers.copy()
+        sign_res = sign(url, self.headers["Cookie"])
+        headers = self.headers.copy()
         headers['x-zst-81'] = sign_res["x-zst-81"]
         headers['x-zse-96'] = sign_res["x-zse-96"]
         return headers
@@ -160,22 +161,6 @@ class ZhiHuClient(AbstractApiClient, ProxyRefreshMixin):
             utils.logger.error(f"[ZhiHuClient.pong] Ping zhihu failed: {e}, and try to login again...")
             ping_flag = False
         return ping_flag
-
-    async def update_cookies(self, browser_context: BrowserContext, urls: Optional[list[str]] = None):
-        """
-        Update cookies method provided by API client, typically called after successful login
-        Args:
-            browser_context: Browser context object
-
-        Returns:
-
-        """
-        cookie_str, cookie_dict = await utils.convert_browser_context_cookies(
-            browser_context,
-            urls=urls or self.cookie_urls,
-        )
-        self.default_headers["cookie"] = cookie_str
-        self.cookie_dict = cookie_dict
 
     async def get_current_user_info(self) -> Dict:
         """

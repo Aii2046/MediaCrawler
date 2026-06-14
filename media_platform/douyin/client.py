@@ -26,8 +26,7 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, Union, Optional
 import httpx
 from playwright.async_api import BrowserContext
 
-from base.base_crawler import AbstractApiClient
-from proxy.proxy_mixin import ProxyRefreshMixin
+from base.base_crawler import BasePlatformClient
 from tools import utils
 from tools.httpx_util import make_async_client
 from var import request_keyword_var
@@ -40,7 +39,7 @@ from .field import *
 from .help import *
 
 
-class DouYinClient(AbstractApiClient, ProxyRefreshMixin):
+class DouYinClient(BasePlatformClient):
 
     def __init__(
         self,
@@ -52,9 +51,6 @@ class DouYinClient(AbstractApiClient, ProxyRefreshMixin):
         cookie_dict: Dict,
         proxy_ip_pool: Optional["ProxyIpPool"] = None,
     ):
-        self.proxy = proxy
-        self.timeout = timeout
-        self.headers = headers
         self._host = "https://www.douyin.com"
         self.cookie_urls = [
             "https://douyin.com",
@@ -63,10 +59,14 @@ class DouYinClient(AbstractApiClient, ProxyRefreshMixin):
             "https://douhot.douyin.com",
             "https://live.douyin.com",
         ]
-        self.playwright_page = playwright_page
-        self.cookie_dict = cookie_dict
-        # Initialize proxy pool (from ProxyRefreshMixin)
-        self.init_proxy_pool(proxy_ip_pool)
+        super().__init__(
+            timeout=timeout,
+            proxy=proxy,
+            headers=headers,
+            playwright_page=playwright_page,
+            cookie_dict=cookie_dict,
+            proxy_ip_pool=proxy_ip_pool,
+        )
 
     async def __process_req_params(
         self,
@@ -157,14 +157,6 @@ class DouYinClient(AbstractApiClient, ProxyRefreshMixin):
             urls=self.cookie_urls,
         )
         return cookie_dict.get("LOGIN_STATUS") == "1"
-
-    async def update_cookies(self, browser_context: BrowserContext, urls: Optional[list[str]] = None):
-        cookie_str, cookie_dict = await utils.convert_browser_context_cookies(
-            browser_context,
-            urls=urls or self.cookie_urls,
-        )
-        self.headers["Cookie"] = cookie_str
-        self.cookie_dict = cookie_dict
 
     async def search_info_by_keyword(
         self,
@@ -345,18 +337,7 @@ class DouYinClient(AbstractApiClient, ProxyRefreshMixin):
         return result
 
     async def get_aweme_media(self, url: str) -> Union[bytes, None]:
-        async with make_async_client(proxy=self.proxy) as client:
-            try:
-                response = await client.request("GET", url, timeout=self.timeout, follow_redirects=True)
-                response.raise_for_status()
-                if not response.reason_phrase == "OK":
-                    utils.logger.error(f"[DouYinClient.get_aweme_media] request {url} err, res:{response.text}")
-                    return None
-                else:
-                    return response.content
-            except httpx.HTTPError as exc:  # some wrong when call httpx.request method, such as connection error, client error, server error or response status code is not 2xx
-                utils.logger.error(f"[DouYinClient.get_aweme_media] {exc.__class__.__name__} for {exc.request.url} - {exc}")  # Keep the original exception type name for developers to debug
-                return None
+        return await self._download_media(url, follow_redirects=True)
 
     async def resolve_short_url(self, short_url: str) -> str:
         """

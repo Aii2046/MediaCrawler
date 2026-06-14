@@ -17,10 +17,20 @@
 # 详细许可条款请参阅项目根目录下的LICENSE文件。
 # 使用本代码即表示您同意遵守上述原则和LICENSE中的所有条款。
 
+import json
 from abc import ABC, abstractmethod
-from typing import Dict, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
+from urllib.parse import urlencode
 
-from playwright.async_api import BrowserContext, BrowserType, Playwright
+import httpx
+from playwright.async_api import BrowserContext, BrowserType, Page, Playwright
+
+from proxy.proxy_mixin import ProxyRefreshMixin
+from tools import utils
+from tools.httpx_util import make_async_client
+
+if TYPE_CHECKING:
+    from proxy.proxy_ip_pool import ProxyIpPool
 
 
 class AbstractCrawler(ABC):
@@ -125,3 +135,74 @@ class AbstractApiClient(ABC):
     @abstractmethod
     async def update_cookies(self, browser_context: BrowserContext):
         pass
+
+
+class BasePlatformClient(AbstractApiClient, ProxyRefreshMixin):
+    """Concrete base class providing shared implementations for platform API clients.
+
+    Subclasses should set `_host` and `cookie_urls` as instance attributes,
+    either before calling super().__init__() or immediately after.
+    """
+
+    def __init__(
+        self,
+        timeout: int = 60,
+        proxy: Optional[str] = None,
+        *,
+        headers: Dict[str, str],
+        playwright_page: Optional[Page] = None,
+        cookie_dict: Optional[Dict[str, str]] = None,
+        proxy_ip_pool: Optional["ProxyIpPool"] = None,
+    ):
+        self.proxy = proxy
+        self.timeout = timeout
+        self.headers = headers
+        self.playwright_page = playwright_page
+        self.cookie_dict = cookie_dict or {}
+        if not hasattr(self, "_host"):
+            self._host = ""
+        if not hasattr(self, "cookie_urls"):
+            self.cookie_urls: List[str] = []
+        self.init_proxy_pool(proxy_ip_pool)
+
+    async def update_cookies(
+        self, browser_context: BrowserContext, urls: Optional[List[str]] = None
+    ):
+        cookie_str, cookie_dict = await utils.convert_browser_context_cookies(
+            browser_context,
+            urls=urls or self.cookie_urls,
+        )
+        self.headers["Cookie"] = cookie_str
+        self.cookie_dict = cookie_dict
+
+    async def get(self, uri: str, params: Optional[Dict] = None, **kwargs) -> Any:
+        final_uri = uri
+        if isinstance(params, dict):
+            final_uri = f"{uri}?{urlencode(params)}"
+        return await self.request(
+            method="GET", url=f"{self._host}{final_uri}", headers=self.headers, **kwargs
+        )
+
+    async def post(self, uri: str, data: dict, **kwargs) -> Any:
+        json_str = json.dumps(data, separators=(",", ":"), ensure_ascii=False)
+        return await self.request(
+            method="POST",
+            url=f"{self._host}{uri}",
+            data=json_str,
+            headers=self.headers,
+            **kwargs,
+        )
+
+    async def _download_media(self, url: str, **client_kwargs) -> Optional[bytes]:
+        await self._refresh_proxy_if_expired()
+        async with make_async_client(proxy=self.proxy, **client_kwargs) as client:
+            try:
+                response = await client.request("GET", url, timeout=self.timeout)
+                response.raise_for_status()
+                return response.content
+            except httpx.HTTPError as exc:
+                utils.logger.error(
+                    f"[{self.__class__.__name__}._download_media] "
+                    f"{exc.__class__.__name__} for {exc.request.url} - {exc}"
+                )
+                return None

@@ -407,7 +407,7 @@ class ZhihuCrawler(AbstractCrawler):
             headers={
                 "accept": "*/*",
                 "accept-language": "zh-CN,zh;q=0.9",
-                "cookie": cookie_str,
+                "Cookie": cookie_str,
                 "priority": "u=1, i",
                 "referer": "https://www.zhihu.com/search?q=python&time_interval=a_year&type=content",
                 "user-agent": self.user_agent,

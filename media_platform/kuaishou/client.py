@@ -28,8 +28,7 @@ import httpx
 from playwright.async_api import BrowserContext, Page
 
 import config
-from base.base_crawler import AbstractApiClient
-from proxy.proxy_mixin import ProxyRefreshMixin
+from base.base_crawler import BasePlatformClient
 from tools import utils
 from tools.httpx_util import make_async_client
 
@@ -40,7 +39,7 @@ from .exception import DataFetchError
 from .graphql import KuaiShouGraphQL
 
 
-class KuaiShouClient(AbstractApiClient, ProxyRefreshMixin):
+class KuaiShouClient(BasePlatformClient):
     def __init__(
         self,
         timeout=10,
@@ -51,17 +50,18 @@ class KuaiShouClient(AbstractApiClient, ProxyRefreshMixin):
         cookie_dict: Dict[str, str],
         proxy_ip_pool: Optional["ProxyIpPool"] = None,
     ):
-        self.proxy = proxy
-        self.timeout = timeout
-        self.headers = headers
         self._host = "https://www.kuaishou.com/graphql"
         self._rest_host = "https://www.kuaishou.com"
-        self.cookie_urls = [self._rest_host]
-        self.playwright_page = playwright_page
-        self.cookie_dict = cookie_dict
         self.graphql = KuaiShouGraphQL()
-        # Initialize proxy pool (from ProxyRefreshMixin)
-        self.init_proxy_pool(proxy_ip_pool)
+        super().__init__(
+            timeout=timeout,
+            proxy=proxy,
+            headers=headers,
+            playwright_page=playwright_page,
+            cookie_dict=cookie_dict,
+            proxy_ip_pool=proxy_ip_pool,
+        )
+        self.cookie_urls = [self._rest_host]
 
     async def request(self, method, url, **kwargs) -> Any:
         # Check if proxy is expired before each request
@@ -74,20 +74,6 @@ class KuaiShouClient(AbstractApiClient, ProxyRefreshMixin):
             raise DataFetchError(data.get("errors", "unkonw error"))
         else:
             return data.get("data", {})
-
-    async def get(self, uri: str, params=None) -> Dict:
-        final_uri = uri
-        if isinstance(params, dict):
-            final_uri = f"{uri}?" f"{urlencode(params)}"
-        return await self.request(
-            method="GET", url=f"{self._host}{final_uri}", headers=self.headers
-        )
-
-    async def post(self, uri: str, data: dict) -> Dict:
-        json_str = json.dumps(data, separators=(",", ":"), ensure_ascii=False)
-        return await self.request(
-            method="POST", url=f"{self._host}{uri}", data=json_str, headers=self.headers
-        )
 
     async def request_rest_v2(self, uri: str, data: dict) -> Dict:
         """
@@ -133,14 +119,6 @@ class KuaiShouClient(AbstractApiClient, ProxyRefreshMixin):
             )
             ping_flag = False
         return ping_flag
-
-    async def update_cookies(self, browser_context: BrowserContext, urls: Optional[list[str]] = None):
-        cookie_str, cookie_dict = await utils.convert_browser_context_cookies(
-            browser_context,
-            urls=urls or self.cookie_urls,
-        )
-        self.headers["Cookie"] = cookie_str
-        self.cookie_dict = cookie_dict
 
     async def search_info_by_keyword(
         self, keyword: str, pcursor: str, search_session_id: str = ""
