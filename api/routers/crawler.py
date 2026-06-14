@@ -17,9 +17,11 @@
 # 使用本代码即表示您同意遵守上述原则和LICENSE中的所有条款。
 
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import JSONResponse
 
 from ..schemas import CrawlerStartRequest, CrawlerStatusResponse
 from ..services import crawler_manager
+from constant.crawler_error import CrawlerErrorCode
 
 router = APIRouter(prefix="/crawler", tags=["crawler"])
 
@@ -31,8 +33,17 @@ async def start_crawler(request: CrawlerStartRequest):
     if not success:
         # Handle concurrent/duplicate requests: if process is already running, return 400 instead of 500
         if crawler_manager.process and crawler_manager.process.poll() is None:
-            raise HTTPException(status_code=400, detail="Crawler is already running")
-        raise HTTPException(status_code=500, detail="Failed to start crawler")
+            return JSONResponse(status_code=400, content={
+                "status": "error",
+                "code": CrawlerErrorCode.INVALID_CONFIG.value,
+                "message": "Crawler is already running",
+            })
+        return JSONResponse(status_code=500, content={
+            "status": "error",
+            "code": CrawlerErrorCode.INTERNAL_ERROR.value,
+            "message": "Failed to start crawler",
+            "error": crawler_manager.last_error.model_dump() if crawler_manager.last_error else None,
+        })
 
     return {"status": "ok", "message": "Crawler started successfully"}
 
@@ -44,8 +55,16 @@ async def stop_crawler():
     if not success:
         # Handle concurrent/duplicate requests: if process already exited/doesn't exist, return 400 instead of 500
         if not crawler_manager.process or crawler_manager.process.poll() is not None:
-            raise HTTPException(status_code=400, detail="No crawler is running")
-        raise HTTPException(status_code=500, detail="Failed to stop crawler")
+            return JSONResponse(status_code=400, content={
+                "status": "error",
+                "code": CrawlerErrorCode.INVALID_INPUT.value,
+                "message": "No crawler is running",
+            })
+        return JSONResponse(status_code=500, content={
+            "status": "error",
+            "code": CrawlerErrorCode.INTERNAL_ERROR.value,
+            "message": "Failed to stop crawler",
+        })
 
     return {"status": "ok", "message": "Crawler stopped successfully"}
 

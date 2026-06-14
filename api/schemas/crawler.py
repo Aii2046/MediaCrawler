@@ -78,6 +78,21 @@ class CrawlerStartRequest(BaseModel):
     max_comments_count: Optional[int] = Field(default=None, ge=1, le=MAX_API_LIMIT_COUNT)
 
 
+class ProgressInfo(BaseModel):
+    """Current crawl progress information."""
+    phase: str = ""
+    current: int = 0
+    total: int = 0
+    message: str = ""
+
+
+class CrawlerErrorInfo(BaseModel):
+    """Structured error information from crawler."""
+    code: str
+    message: str
+    details: Optional[dict] = None
+
+
 class CrawlerStatusResponse(BaseModel):
     """Crawler status response"""
     status: Literal["idle", "running", "stopping", "error"]
@@ -85,6 +100,9 @@ class CrawlerStatusResponse(BaseModel):
     crawler_type: Optional[str] = None
     started_at: Optional[str] = None
     error_message: Optional[str] = None
+    # New optional fields for enriched status (backward compatible)
+    progress: Optional[ProgressInfo] = None
+    error: Optional[CrawlerErrorInfo] = None
 
 
 class LogEntry(BaseModel):

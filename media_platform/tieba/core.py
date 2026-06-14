@@ -44,6 +44,8 @@ from .client import BaiduTieBaClient
 from .field import SearchNoteType, SearchSortType
 from .help import TieBaExtractor
 from .login import BaiduTieBaLogin
+from constant.crawler_error import CrawlerErrorCode
+from tools.crawler_events import emit_progress, emit_error, emit_phase, emit_complete
 
 
 class TieBaCrawler(AbstractCrawler):
@@ -129,6 +131,7 @@ class TieBaCrawler(AbstractCrawler):
                     urls=self.cookie_urls,
                 )
 
+            emit_phase("login", "Login check completed")
             crawler_type_var.set(config.CRAWLER_TYPE)
             if config.CRAWLER_TYPE == "search":
                 # Search for notes and retrieve their comment information.
@@ -143,6 +146,7 @@ class TieBaCrawler(AbstractCrawler):
             else:
                 pass
 
+            emit_complete()
             utils.logger.info("[BaiduTieBaCrawler.start] Tieba Crawler finished ...")
 
     async def search(self) -> None:
@@ -184,6 +188,7 @@ class TieBaCrawler(AbstractCrawler):
                             note_type=SearchNoteType.FIXED_THREAD,
                         )
                     )
+                    emit_progress("search", page, config.CRAWLER_MAX_NOTES_COUNT // tieba_limit_count, f"Searching keyword: {keyword}, page: {page}")
                     if not notes_list:
                         utils.logger.info(
                             f"[BaiduTieBaCrawler.search] Search note list is empty"
@@ -202,6 +207,7 @@ class TieBaCrawler(AbstractCrawler):
 
                     page += 1
                 except Exception as ex:
+                    emit_error(CrawlerErrorCode.INTERNAL_ERROR, f"Search tieba keyword error, page: {page}, keyword: {keyword}")
                     utils.logger.error(
                         f"[BaiduTieBaCrawler.search] Search keywords error, current page: {page}, current keyword: {keyword}, err: {ex}"
                     )
@@ -263,6 +269,7 @@ class TieBaCrawler(AbstractCrawler):
             for note_id in note_id_list
         ]
         note_details = await asyncio.gather(*task_list)
+        emit_progress("detail", len(note_details), len(note_id_list), f"Fetched {len(note_details)} note details")
         note_details_model: List[TiebaNote] = []
         for note_detail in note_details:
             if note_detail is not None:
@@ -300,6 +307,7 @@ class TieBaCrawler(AbstractCrawler):
                     return None
                 return note_detail
             except Exception as ex:
+                emit_error(CrawlerErrorCode.INTERNAL_ERROR, f"Get note detail error: {note_id}")
                 utils.logger.error(
                     f"[BaiduTieBaCrawler.get_note_detail] Get note detail error: {ex}"
                 )
@@ -321,6 +329,8 @@ class TieBaCrawler(AbstractCrawler):
         """
         if not config.ENABLE_GET_COMMENTS:
             return
+
+        emit_phase("comments", f"Fetching comments for {len(note_detail_list)} notes")
 
         semaphore = asyncio.Semaphore(config.MAX_CONCURRENCY_NUM)
         task_list: List[Task] = []

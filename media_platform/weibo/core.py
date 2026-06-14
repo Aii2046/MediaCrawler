@@ -49,6 +49,8 @@ from .exception import DataFetchError
 from .field import SearchType
 from .help import filter_search_result_card
 from .login import WeiboLogin
+from constant.crawler_error import CrawlerErrorCode
+from tools.crawler_events import emit_progress, emit_error, emit_phase, emit_complete
 
 
 class WeiboCrawler(AbstractCrawler):
@@ -120,6 +122,7 @@ class WeiboCrawler(AbstractCrawler):
                     urls=self.cookie_urls,
                 )
 
+            emit_phase("login", "Login check completed")
             crawler_type_var.set(config.CRAWLER_TYPE)
             if config.CRAWLER_TYPE == "search":
                 # Search for video and retrieve their comment information.
@@ -132,6 +135,7 @@ class WeiboCrawler(AbstractCrawler):
                 await self.get_creators_and_notes()
             else:
                 pass
+            emit_complete()
             utils.logger.info("[WeiboCrawler.start] Weibo Crawler finished ...")
 
     async def search(self):
@@ -169,6 +173,7 @@ class WeiboCrawler(AbstractCrawler):
                     continue
                 utils.logger.info(f"[WeiboCrawler.search] search weibo keyword: {keyword}, page: {page}")
                 search_res = await self.wb_client.get_note_by_keyword(keyword=keyword, page=page, search_type=search_type)
+                emit_progress("search", page, config.CRAWLER_MAX_NOTES_COUNT // weibo_limit_count, f"Searching keyword: {keyword}, page: {page}")
                 note_id_list: List[str] = []
                 note_list = filter_search_result_card(search_res.get("cards"))
                 # If full text fetching is enabled, batch get full text of posts
@@ -219,6 +224,7 @@ class WeiboCrawler(AbstractCrawler):
 
                 return result
             except DataFetchError as ex:
+                emit_error(CrawlerErrorCode.PLATFORM_ERROR, f"Get note detail error: {note_id}")
                 utils.logger.error(f"[WeiboCrawler.get_note_info_task] Get note detail error: {ex}")
                 return None
             except KeyError as ex:
@@ -235,6 +241,7 @@ class WeiboCrawler(AbstractCrawler):
             utils.logger.info(f"[WeiboCrawler.batch_get_note_comments] Crawling comment mode is not enabled")
             return
 
+        emit_phase("comments", f"Fetching comments for {len(note_id_list)} notes")
         utils.logger.info(f"[WeiboCrawler.batch_get_notes_comments] note ids:{note_id_list}")
         semaphore = asyncio.Semaphore(config.MAX_CONCURRENCY_NUM)
         task_list: List[Task] = []
@@ -265,8 +272,10 @@ class WeiboCrawler(AbstractCrawler):
                     max_count=config.CRAWLER_MAX_COMMENTS_COUNT_SINGLENOTES,
                 )
             except DataFetchError as ex:
+                emit_error(CrawlerErrorCode.PLATFORM_ERROR, f"Get comments failed for note: {note_id}")
                 utils.logger.error(f"[WeiboCrawler.get_note_comments] get note_id: {note_id} comment error: {ex}")
             except Exception as e:
+                emit_error(CrawlerErrorCode.ACCOUNT_BANNED, f"May be blocked while fetching comments: {note_id}")
                 utils.logger.error(f"[WeiboCrawler.get_note_comments] may be been blocked, err:{e}")
 
     async def get_note_images(self, mblog: Dict):

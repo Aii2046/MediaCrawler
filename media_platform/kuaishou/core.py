@@ -46,6 +46,8 @@ from .client import KuaiShouClient
 from .exception import DataFetchError
 from .help import parse_video_info_from_url, parse_creator_info_from_url
 from .login import KuaishouLogin
+from constant.crawler_error import CrawlerErrorCode
+from tools.crawler_events import emit_progress, emit_error, emit_phase, emit_complete
 
 
 class KuaishouCrawler(AbstractCrawler):
@@ -112,6 +114,7 @@ class KuaishouCrawler(AbstractCrawler):
                     urls=self.cookie_urls,
                 )
 
+            emit_phase("login", "Login check completed")
             crawler_type_var.set(config.CRAWLER_TYPE)
             if config.CRAWLER_TYPE == "search":
                 # Search for videos and retrieve their comment information.
@@ -125,6 +128,7 @@ class KuaishouCrawler(AbstractCrawler):
             else:
                 pass
 
+            emit_complete()
             utils.logger.info("[KuaishouCrawler.start] Kuaishou Crawler finished ...")
 
     async def search(self):
@@ -156,6 +160,7 @@ class KuaishouCrawler(AbstractCrawler):
                     pcursor=str(page),
                     search_session_id=search_session_id,
                 )
+                emit_progress("search", page, config.CRAWLER_MAX_NOTES_COUNT // ks_limit_count, f"Searching keyword: {keyword}, page: {page}")
                 if not videos_res:
                     utils.logger.error(
                         f"[KuaishouCrawler.search] search info by keyword:{keyword} not found data"
@@ -164,6 +169,7 @@ class KuaishouCrawler(AbstractCrawler):
 
                 vision_search_photo: Dict = videos_res.get("visionSearchPhoto")
                 if vision_search_photo.get("result") != 1:
+                    emit_error(CrawlerErrorCode.PLATFORM_ERROR, f"Search kuaishou keyword: {keyword} returned no data")
                     utils.logger.error(
                         f"[KuaishouCrawler.search] search info by keyword:{keyword} not found data "
                     )
@@ -223,6 +229,7 @@ class KuaishouCrawler(AbstractCrawler):
                 )
                 return result.get("visionVideoDetail")
             except DataFetchError as ex:
+                emit_error(CrawlerErrorCode.PLATFORM_ERROR, f"Get video detail error: {video_id}")
                 utils.logger.error(
                     f"[KuaishouCrawler.get_video_info_task] Get video detail error: {ex}"
                 )
@@ -245,6 +252,7 @@ class KuaishouCrawler(AbstractCrawler):
             )
             return
 
+        emit_phase("comments", f"Fetching comments for {len(video_id_list)} videos")
         utils.logger.info(
             f"[KuaishouCrawler.batch_get_video_comments] video ids:{video_id_list}"
         )
@@ -283,10 +291,12 @@ class KuaishouCrawler(AbstractCrawler):
                     max_count=config.CRAWLER_MAX_COMMENTS_COUNT_SINGLENOTES,
                 )
             except DataFetchError as ex:
+                emit_error(CrawlerErrorCode.PLATFORM_ERROR, f"Get comments failed for video: {video_id}")
                 utils.logger.error(
                     f"[KuaishouCrawler.get_comments] get video_id: {video_id} comment error: {ex}"
                 )
             except Exception as e:
+                emit_error(CrawlerErrorCode.ACCOUNT_BANNED, "May be blocked by kuaishou, pausing and refreshing cookies")
                 utils.logger.error(
                     f"[KuaishouCrawler.get_comments] may be been blocked, err:{e}"
                 )

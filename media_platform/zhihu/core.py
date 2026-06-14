@@ -47,6 +47,8 @@ from .client import ZhiHuClient
 from .exception import DataFetchError
 from .help import ZhihuExtractor, judge_zhihu_url
 from .login import ZhiHuLogin
+from constant.crawler_error import CrawlerErrorCode
+from tools.crawler_events import emit_progress, emit_error, emit_phase, emit_complete
 
 
 class ZhihuCrawler(AbstractCrawler):
@@ -132,6 +134,7 @@ class ZhihuCrawler(AbstractCrawler):
                 urls=self.cookie_urls,
             )
 
+            emit_phase("login", "Login check completed")
             crawler_type_var.set(config.CRAWLER_TYPE)
             if config.CRAWLER_TYPE == "search":
                 # Search for notes and retrieve their comment information.
@@ -145,6 +148,7 @@ class ZhihuCrawler(AbstractCrawler):
             else:
                 pass
 
+            emit_complete()
             utils.logger.info("[ZhihuCrawler.start] Zhihu Crawler finished ...")
 
     async def search(self) -> None:
@@ -178,6 +182,7 @@ class ZhihuCrawler(AbstractCrawler):
                             page=page,
                         )
                     )
+                    emit_progress("search", page, config.CRAWLER_MAX_NOTES_COUNT // zhihu_limit_count, f"Searching keyword: {keyword}, page: {page}")
                     utils.logger.info(
                         f"[ZhihuCrawler.search] Search contents :{content_list}"
                     )
@@ -195,6 +200,7 @@ class ZhihuCrawler(AbstractCrawler):
 
                     await self.batch_get_content_comments(content_list)
                 except DataFetchError:
+                    emit_error(CrawlerErrorCode.PLATFORM_ERROR, "Search zhihu content error")
                     utils.logger.error("[ZhihuCrawler.search] Search content error")
                     return
 
@@ -212,6 +218,8 @@ class ZhihuCrawler(AbstractCrawler):
                 f"[ZhihuCrawler.batch_get_content_comments] Crawling comment mode is not enabled"
             )
             return
+
+        emit_phase("comments", f"Fetching comments for {len(content_list)} contents")
 
         semaphore = asyncio.Semaphore(config.MAX_CONCURRENCY_NUM)
         task_list: List[Task] = []
@@ -268,6 +276,7 @@ class ZhihuCrawler(AbstractCrawler):
                 url_token=user_url_token
             )
             if not createor_info:
+                emit_error(CrawlerErrorCode.DATA_NOT_FOUND, f"Creator {user_url_token} not found")
                 utils.logger.info(
                     f"[ZhihuCrawler.get_creators_and_notes] Creator {user_url_token} not found"
                 )
@@ -380,6 +389,7 @@ class ZhihuCrawler(AbstractCrawler):
 
         need_get_comment_notes: List[ZhihuContent] = []
         note_details = await asyncio.gather(*get_note_detail_task_list)
+        emit_progress("detail", len(note_details), len(config.ZHIHU_SPECIFIED_ID_LIST), f"Fetched {len(note_details)} note details")
         for index, note_detail in enumerate(note_details):
             if not note_detail:
                 utils.logger.info(

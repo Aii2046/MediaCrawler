@@ -44,6 +44,8 @@ from .exception import DataFetchError
 from .field import PublishTimeType
 from .help import parse_video_info_from_url, parse_creator_info_from_url
 from .login import DouYinLogin
+from constant.crawler_error import CrawlerErrorCode
+from tools.crawler_events import emit_progress, emit_error, emit_phase, emit_complete
 
 
 class DouYinCrawler(AbstractCrawler):
@@ -111,6 +113,7 @@ class DouYinCrawler(AbstractCrawler):
                     browser_context=self.browser_context,
                     urls=self.cookie_urls,
                 )
+            emit_phase("login", "Login check completed")
             crawler_type_var.set(config.CRAWLER_TYPE)
             if config.CRAWLER_TYPE == "search":
                 # Search for notes and retrieve their comment information.
@@ -122,6 +125,7 @@ class DouYinCrawler(AbstractCrawler):
                 # Get the information and comments of the specified creator
                 await self.get_creators_and_videos()
 
+            emit_complete()
             utils.logger.info("[DouYinCrawler.start] Douyin Crawler finished ...")
 
     async def search(self) -> None:
@@ -149,15 +153,18 @@ class DouYinCrawler(AbstractCrawler):
                         publish_time=PublishTimeType(config.PUBLISH_TIME_TYPE),
                         search_id=dy_search_id,
                     )
+                    emit_progress("search", page, config.CRAWLER_MAX_NOTES_COUNT // dy_limit_count, f"Searching keyword: {keyword}, page: {page}")
                     if posts_res.get("data") is None or posts_res.get("data") == []:
                         utils.logger.info(f"[DouYinCrawler.search] search douyin keyword: {keyword}, page: {page} is empty,{posts_res.get('data')}`")
                         break
                 except DataFetchError:
+                    emit_error(CrawlerErrorCode.PLATFORM_ERROR, f"Search douyin keyword: {keyword} failed")
                     utils.logger.error(f"[DouYinCrawler.search] search douyin keyword: {keyword} failed")
                     break
 
                 page += 1
                 if "data" not in posts_res:
+                    emit_error(CrawlerErrorCode.ACCOUNT_BANNED, f"Account may be rate limited, no data returned")
                     utils.logger.error(f"[DouYinCrawler.search] search douyin keyword: {keyword} failed，账号也许被风控了。")
                     break
                 dy_search_id = posts_res.get("extra", {}).get("logid", "")
@@ -225,6 +232,7 @@ class DouYinCrawler(AbstractCrawler):
                 utils.logger.info(f"[DouYinCrawler.get_aweme_detail] Sleeping for {config.CRAWLER_MAX_SLEEP_SEC} seconds after fetching aweme {aweme_id}")
                 return result
             except DataFetchError as ex:
+                emit_error(CrawlerErrorCode.PLATFORM_ERROR, f"Get aweme detail error: {aweme_id}")
                 utils.logger.error(f"[DouYinCrawler.get_aweme_detail] Get aweme detail error: {ex}")
                 return None
             except KeyError as ex:
@@ -239,6 +247,7 @@ class DouYinCrawler(AbstractCrawler):
             utils.logger.info(f"[DouYinCrawler.batch_get_note_comments] Crawling comment mode is not enabled")
             return
 
+        emit_phase("comments", f"Fetching comments for {len(aweme_list)} videos")
         task_list: List[Task] = []
         semaphore = asyncio.Semaphore(config.MAX_CONCURRENCY_NUM)
         for aweme_id in aweme_list:
@@ -265,6 +274,7 @@ class DouYinCrawler(AbstractCrawler):
                 utils.logger.info(f"[DouYinCrawler.get_comments] Sleeping for {crawl_interval} seconds after fetching comments for aweme {aweme_id}")
                 utils.logger.info(f"[DouYinCrawler.get_comments] aweme_id: {aweme_id} comments have all been obtained and filtered ...")
             except DataFetchError as e:
+                emit_error(CrawlerErrorCode.PLATFORM_ERROR, f"Get comments failed for aweme: {aweme_id}")
                 utils.logger.error(f"[DouYinCrawler.get_comments] aweme_id: {aweme_id} get comments failed, error: {e}")
 
     async def get_creators_and_videos(self) -> None:

@@ -52,6 +52,8 @@ from .exception import DataFetchError
 from .field import SearchOrderType
 from .help import parse_video_info_from_url, parse_creator_info_from_url
 from .login import BilibiliLogin
+from constant.crawler_error import CrawlerErrorCode
+from tools.crawler_events import emit_progress, emit_error, emit_phase, emit_complete
 
 
 class BilibiliCrawler(AbstractCrawler):
@@ -111,6 +113,7 @@ class BilibiliCrawler(AbstractCrawler):
                     urls=self.cookie_urls,
                 )
 
+            emit_phase("login", "Login check completed")
             crawler_type_var.set(config.CRAWLER_TYPE)
             if config.CRAWLER_TYPE == "search":
                 await self.search()
@@ -131,6 +134,7 @@ class BilibiliCrawler(AbstractCrawler):
                     await self.get_all_creator_details(config.BILI_CREATOR_ID_LIST)
             else:
                 pass
+            emit_complete()
             utils.logger.info("[BilibiliCrawler.start] Bilibili Crawler finished ...")
 
     async def search(self):
@@ -210,6 +214,7 @@ class BilibiliCrawler(AbstractCrawler):
                     pubtime_begin_s=0,  # Publish date start timestamp
                     pubtime_end_s=0,  # Publish date end timestamp
                 )
+                emit_progress("search", page, config.CRAWLER_MAX_NOTES_COUNT // bili_limit_count, f"Searching keyword: {keyword}, page: {page}")
                 video_list: List[Dict] = videos_res.get("result")
 
                 if not video_list:
@@ -332,6 +337,7 @@ class BilibiliCrawler(AbstractCrawler):
             utils.logger.info(f"[BilibiliCrawler.batch_get_note_comments] Crawling comment mode is not enabled")
             return
 
+        emit_phase("comments", f"Fetching comments for {len(video_id_list)} videos")
         utils.logger.info(f"[BilibiliCrawler.batch_get_video_comments] video ids:{video_id_list}")
         semaphore = asyncio.Semaphore(config.MAX_CONCURRENCY_NUM)
         task_list: List[Task] = []
@@ -361,8 +367,10 @@ class BilibiliCrawler(AbstractCrawler):
                 )
 
             except DataFetchError as ex:
+                emit_error(CrawlerErrorCode.PLATFORM_ERROR, f"Get comments failed for video: {video_id}")
                 utils.logger.error(f"[BilibiliCrawler.get_comments] get video_id: {video_id} comment error: {ex}")
             except Exception as e:
+                emit_error(CrawlerErrorCode.ACCOUNT_BANNED, f"May be blocked while fetching comments: {video_id}")
                 utils.logger.error(f"[BilibiliCrawler.get_comments] may be been blocked, err:{e}")
                 # Propagate the exception to be caught by the main loop
                 raise
@@ -434,6 +442,7 @@ class BilibiliCrawler(AbstractCrawler):
 
                 return result
             except DataFetchError as ex:
+                emit_error(CrawlerErrorCode.PLATFORM_ERROR, f"Get video detail error: {bvid or aid}")
                 utils.logger.error(f"[BilibiliCrawler.get_video_info_task] Get video detail error: {ex}")
                 return None
             except KeyError as ex:

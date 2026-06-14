@@ -149,3 +149,31 @@ async def websocket_status(websocket: WebSocket):
         pass
     except Exception:
         pass
+
+
+@router.websocket("/ws/events")
+async def websocket_events(websocket: WebSocket):
+    """WebSocket structured event stream.
+
+    Broadcasts real-time crawler events (progress, errors, phase changes,
+    completion) as JSON objects. Each event has a 'type' field indicating
+    the event kind.
+    """
+    await websocket.accept()
+    queue = crawler_manager.get_event_queue()
+
+    try:
+        while True:
+            try:
+                event = await asyncio.wait_for(queue.get(), timeout=30.0)
+                await websocket.send_json(event)
+            except asyncio.TimeoutError:
+                # Send ping to keep connection alive
+                try:
+                    await websocket.send_json({"type": "ping"})
+                except Exception:
+                    break
+    except WebSocketDisconnect:
+        pass
+    except Exception:
+        pass

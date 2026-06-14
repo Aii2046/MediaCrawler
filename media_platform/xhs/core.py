@@ -46,6 +46,8 @@ from .exception import DataFetchError, NoteNotFoundError
 from .field import SearchSortType
 from .help import parse_note_info_from_note_url, parse_creator_info_from_url, get_search_id
 from .login import XiaoHongShuLogin
+from constant.crawler_error import CrawlerErrorCode
+from tools.crawler_events import emit_progress, emit_error, emit_phase, emit_complete
 
 
 class XiaoHongShuCrawler(AbstractCrawler):
@@ -111,6 +113,7 @@ class XiaoHongShuCrawler(AbstractCrawler):
                     urls=self.cookie_urls,
                 )
 
+            emit_phase("login", "Login check completed")
             crawler_type_var.set(config.CRAWLER_TYPE)
             if config.CRAWLER_TYPE == "search":
                 # Search for notes and retrieve their comment information.
@@ -124,6 +127,7 @@ class XiaoHongShuCrawler(AbstractCrawler):
             else:
                 pass
 
+            emit_complete()
             utils.logger.info("[XiaoHongShuCrawler.start] Xhs Crawler finished ...")
 
     async def search(self) -> None:
@@ -154,6 +158,7 @@ class XiaoHongShuCrawler(AbstractCrawler):
                         page=page,
                         sort=(SearchSortType(config.SORT_TYPE) if config.SORT_TYPE != "" else SearchSortType.GENERAL),
                     )
+                    emit_progress("search", page, config.CRAWLER_MAX_NOTES_COUNT // xhs_limit_count, f"Searching keyword: {keyword}, page: {page}")
                     utils.logger.info(f"[XiaoHongShuCrawler.search] Search notes response: {notes_res}")
                     if not notes_res or not notes_res.get("has_more", False):
                         utils.logger.info("[XiaoHongShuCrawler.search] No more content!")
@@ -182,6 +187,7 @@ class XiaoHongShuCrawler(AbstractCrawler):
                     await asyncio.sleep(config.CRAWLER_MAX_SLEEP_SEC)
                     utils.logger.info(f"[XiaoHongShuCrawler.search] Sleeping for {config.CRAWLER_MAX_SLEEP_SEC} seconds after page {page-1}")
                 except DataFetchError:
+                    emit_error(CrawlerErrorCode.PLATFORM_ERROR, "Get note detail error during search")
                     utils.logger.error("[XiaoHongShuCrawler.search] Get note detail error")
                     break
 
@@ -313,9 +319,11 @@ class XiaoHongShuCrawler(AbstractCrawler):
                 return note_detail
 
             except NoteNotFoundError as ex:
+                emit_error(CrawlerErrorCode.DATA_NOT_FOUND, f"Note not found: {note_id}")
                 utils.logger.warning(f"[XiaoHongShuCrawler.get_note_detail_async_task] Note not found: {note_id}, {ex}")
                 return None
             except DataFetchError as ex:
+                emit_error(CrawlerErrorCode.PLATFORM_ERROR, f"Get note detail error: {note_id}")
                 utils.logger.error(f"[XiaoHongShuCrawler.get_note_detail_async_task] Get note detail error: {ex}")
                 return None
             except KeyError as ex:
@@ -328,6 +336,7 @@ class XiaoHongShuCrawler(AbstractCrawler):
             utils.logger.info(f"[XiaoHongShuCrawler.batch_get_note_comments] Crawling comment mode is not enabled")
             return
 
+        emit_phase("comments", f"Fetching comments for {len(note_list)} notes")
         utils.logger.info(f"[XiaoHongShuCrawler.batch_get_note_comments] Begin batch get note comments, note list: {note_list}")
         semaphore = asyncio.Semaphore(config.MAX_CONCURRENCY_NUM)
         task_list: List[Task] = []

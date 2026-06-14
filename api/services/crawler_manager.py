@@ -17,6 +17,7 @@
 # 使用本代码即表示您同意遵守上述原则和LICENSE中的所有条款。
 
 import asyncio
+import json
 import subprocess
 import signal
 import os
@@ -24,7 +25,8 @@ from typing import Optional, List
 from datetime import datetime
 from pathlib import Path
 
-from ..schemas import CrawlerStartRequest, LogEntry
+from ..schemas import CrawlerStartRequest, LogEntry, ProgressInfo, CrawlerErrorInfo
+from constant.crawler_error import CrawlerErrorCode
 
 
 class CrawlerManager:
@@ -43,6 +45,11 @@ class CrawlerManager:
         self._project_root = Path(__file__).parent.parent.parent
         # Log queue - for pushing to WebSocket
         self._log_queue: Optional[asyncio.Queue] = None
+        # Event queue - for pushing structured events to WebSocket /ws/events
+        self._event_queue: Optional[asyncio.Queue] = None
+        # Progress and error state from crawler subprocess
+        self.progress_state: Optional[ProgressInfo] = None
+        self.last_error: Optional[CrawlerErrorInfo] = None
 
     @property
     def logs(self) -> List[LogEntry]:
@@ -53,6 +60,12 @@ class CrawlerManager:
         if self._log_queue is None:
             self._log_queue = asyncio.Queue()
         return self._log_queue
+
+    def get_event_queue(self) -> asyncio.Queue:
+        """Get or create event queue for structured event broadcasting"""
+        if self._event_queue is None:
+            self._event_queue = asyncio.Queue(maxsize=200)
+        return self._event_queue
 
     def _create_log_entry(self, message: str, level: str = "info") -> LogEntry:
         """Create log entry"""
@@ -100,6 +113,10 @@ class CrawlerManager:
             self._logs = []
             self._log_id = 0
 
+            # Reset progress and error state
+            self.progress_state = None
+            self.last_error = None
+
             # Clear pending queue (don't replace object to avoid WebSocket broadcast coroutine holding old queue reference)
             if self._log_queue is None:
                 self._log_queue = asyncio.Queue()
@@ -107,6 +124,16 @@ class CrawlerManager:
                 try:
                     while True:
                         self._log_queue.get_nowait()
+                except asyncio.QueueEmpty:
+                    pass
+
+            # Clear event queue
+            if self._event_queue is None:
+                self._event_queue = asyncio.Queue(maxsize=200)
+            else:
+                try:
+                    while True:
+                        self._event_queue.get_nowait()
                 except asyncio.QueueEmpty:
                     pass
 
@@ -199,7 +226,9 @@ class CrawlerManager:
             "platform": self.current_config.platform.value if self.current_config else None,
             "crawler_type": self.current_config.crawler_type.value if self.current_config else None,
             "started_at": self.started_at.isoformat() if self.started_at else None,
-            "error_message": None
+            "error_message": self.last_error.message if self.last_error else None,
+            "progress": self.progress_state.model_dump() if self.progress_state else None,
+            "error": self.last_error.model_dump() if self.last_error else None,
         }
 
     def _build_command(self, config: CrawlerStartRequest) -> list:
@@ -238,6 +267,8 @@ class CrawlerManager:
 
         return cmd
 
+    _EVENT_PREFIX = "[CRAWLER_EVENT]"
+
     async def _read_output(self):
         """Asynchronously read process output"""
         loop = asyncio.get_event_loop()
@@ -251,9 +282,7 @@ class CrawlerManager:
                 if line:
                     line = line.strip()
                     if line:
-                        level = self._parse_log_level(line)
-                        entry = self._create_log_entry(line, level)
-                        await self._push_log(entry)
+                        await self._process_output_line(line)
 
             # Read remaining output
             if self.process and self.process.stdout:
@@ -263,9 +292,7 @@ class CrawlerManager:
                 if remaining:
                     for line in remaining.strip().split('\n'):
                         if line.strip():
-                            level = self._parse_log_level(line)
-                            entry = self._create_log_entry(line.strip(), level)
-                            await self._push_log(entry)
+                            await self._process_output_line(line.strip())
 
             # Process ended
             if self.status == "running":
@@ -273,15 +300,81 @@ class CrawlerManager:
                 if exit_code == 0:
                     entry = self._create_log_entry("Crawler completed successfully", "success")
                 else:
+                    # If no structured error was captured, record an internal error
+                    if not self.last_error:
+                        self.last_error = CrawlerErrorInfo(
+                            code=CrawlerErrorCode.INTERNAL_ERROR.value,
+                            message=f"Crawler exited with code: {exit_code}",
+                        )
+                        self.status = "error"
                     entry = self._create_log_entry(f"Crawler exited with code: {exit_code}", "warning")
                 await self._push_log(entry)
-                self.status = "idle"
+                if self.status == "running":
+                    self.status = "idle"
 
         except asyncio.CancelledError:
             pass
         except Exception as e:
             entry = self._create_log_entry(f"Error reading output: {str(e)}", "error")
             await self._push_log(entry)
+
+    async def _process_output_line(self, line: str) -> None:
+        """Process a single line of output, detecting structured events."""
+        if line.startswith(self._EVENT_PREFIX):
+            try:
+                event_data = json.loads(line[len(self._EVENT_PREFIX):])
+                event_type = event_data.get("type")
+
+                if event_type == "progress":
+                    self.progress_state = ProgressInfo(
+                        phase=event_data.get("phase", ""),
+                        current=event_data.get("current", 0),
+                        total=event_data.get("total", 0),
+                        message=event_data.get("message", ""),
+                    )
+                elif event_type == "error":
+                    self.last_error = CrawlerErrorInfo(
+                        code=event_data.get("code", CrawlerErrorCode.UNKNOWN.value),
+                        message=event_data.get("message", ""),
+                        details=event_data.get("details"),
+                    )
+                    self.status = "error"
+                elif event_type == "phase_change":
+                    self.progress_state = ProgressInfo(
+                        phase=event_data.get("phase", ""),
+                        current=0,
+                        total=0,
+                        message=event_data.get("message", ""),
+                    )
+                elif event_type == "complete":
+                    self.progress_state = ProgressInfo(
+                        phase="complete",
+                        current=0,
+                        total=0,
+                        message="Crawl completed",
+                    )
+
+                # Also log as a regular entry for /ws/logs
+                log_msg = event_data.get("message") or f"[Event: {event_type}]"
+                level = "error" if event_type == "error" else "info"
+                entry = self._create_log_entry(log_msg, level)
+                await self._push_log(entry)
+
+                # Push to event queue for real-time /ws/events broadcast
+                if self._event_queue is not None:
+                    try:
+                        self._event_queue.put_nowait(event_data)
+                    except asyncio.QueueFull:
+                        pass
+
+                return
+            except (json.JSONDecodeError, Exception):
+                pass  # fall through to regular log handling
+
+        # Regular log line
+        level = self._parse_log_level(line)
+        entry = self._create_log_entry(line, level)
+        await self._push_log(entry)
 
 
 # Global singleton
