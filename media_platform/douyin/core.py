@@ -37,6 +37,7 @@ from proxy.proxy_ip_pool import IpInfoModel, create_ip_pool
 from store import douyin as douyin_store
 from tools import utils
 from tools.cdp_browser import CDPBrowserManager
+from tools.progress import CrawlStage, emit_progress
 from var import crawler_type_var, source_keyword_var
 
 from .client import DouYinClient
@@ -96,8 +97,10 @@ class DouYinCrawler(AbstractCrawler):
 
             self.context_page = await self.browser_context.new_page()
             await self.context_page.goto(self.index_url)
+            emit_progress(CrawlStage.INITIALIZING, message="Launching browser for Douyin")
 
             self.dy_client = await self.create_douyin_client(httpx_proxy_format)
+            emit_progress(CrawlStage.LOGIN, message="Checking Douyin login state")
             if not await self.dy_client.pong(browser_context=self.browser_context):
                 login_obj = DouYinLogin(
                     login_type=config.LOGIN_TYPE,
@@ -122,6 +125,7 @@ class DouYinCrawler(AbstractCrawler):
                 # Get the information and comments of the specified creator
                 await self.get_creators_and_videos()
 
+            emit_progress(CrawlStage.COMPLETED, message="Douyin crawl finished")
             utils.logger.info("[DouYinCrawler.start] Douyin Crawler finished ...")
 
     async def search(self) -> None:
@@ -143,6 +147,7 @@ class DouYinCrawler(AbstractCrawler):
                     continue
                 try:
                     utils.logger.info(f"[DouYinCrawler.search] search douyin keyword: {keyword}, page: {page}")
+                    emit_progress(CrawlStage.SEARCHING, current=page, total=0, message=f"Searching keyword: {keyword}, page {page}", keyword=keyword, page=page)
                     posts_res = await self.dy_client.search_info_by_keyword(
                         keyword=keyword,
                         offset=page * dy_limit_count - dy_limit_count,
@@ -154,6 +159,7 @@ class DouYinCrawler(AbstractCrawler):
                         break
                 except DataFetchError:
                     utils.logger.error(f"[DouYinCrawler.search] search douyin keyword: {keyword} failed")
+                    emit_progress(CrawlStage.FAILED, error_code="ERR_4001", message=f"Search failed for keyword: {keyword}")
                     break
 
                 page += 1
@@ -206,6 +212,7 @@ class DouYinCrawler(AbstractCrawler):
                 utils.logger.error(f"[DouYinCrawler.get_specified_awemes] Failed to parse video URL: {e}")
                 continue
 
+        emit_progress(CrawlStage.FETCHING_DETAILS, current=0, total=len(aweme_id_list), message="Fetching video details")
         semaphore = asyncio.Semaphore(config.MAX_CONCURRENCY_NUM)
         task_list = [self.get_aweme_detail(aweme_id=aweme_id, semaphore=semaphore) for aweme_id in aweme_id_list]
         aweme_details = await asyncio.gather(*task_list)
@@ -226,6 +233,7 @@ class DouYinCrawler(AbstractCrawler):
                 return result
             except DataFetchError as ex:
                 utils.logger.error(f"[DouYinCrawler.get_aweme_detail] Get aweme detail error: {ex}")
+                emit_progress(CrawlStage.FAILED, error_code="ERR_4001", message=f"Get aweme detail error: {ex}")
                 return None
             except KeyError as ex:
                 utils.logger.error(f"[DouYinCrawler.get_aweme_detail] have not fund note detail aweme_id:{aweme_id}, err: {ex}")
@@ -239,6 +247,7 @@ class DouYinCrawler(AbstractCrawler):
             utils.logger.info(f"[DouYinCrawler.batch_get_note_comments] Crawling comment mode is not enabled")
             return
 
+        emit_progress(CrawlStage.FETCHING_COMMENTS, current=0, total=len(aweme_list), message=f"Fetching comments for {len(aweme_list)} videos")
         task_list: List[Task] = []
         semaphore = asyncio.Semaphore(config.MAX_CONCURRENCY_NUM)
         for aweme_id in aweme_list:
@@ -266,6 +275,7 @@ class DouYinCrawler(AbstractCrawler):
                 utils.logger.info(f"[DouYinCrawler.get_comments] aweme_id: {aweme_id} comments have all been obtained and filtered ...")
             except DataFetchError as e:
                 utils.logger.error(f"[DouYinCrawler.get_comments] aweme_id: {aweme_id} get comments failed, error: {e}")
+                emit_progress(CrawlStage.FAILED, error_code="ERR_4001", message=f"Get comments failed for aweme: {aweme_id}")
 
     async def get_creators_and_videos(self) -> None:
         """

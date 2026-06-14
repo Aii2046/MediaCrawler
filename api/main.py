@@ -26,12 +26,16 @@ import os
 import sys
 import subprocess
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .routers import crawler_router, data_router, websocket_router
+from .exceptions import CrawlerApiException
+from .schemas.response import ErrorCode, ApiResponse
 
 app = FastAPI(
     title="MediaCrawler WebUI API",
@@ -60,6 +64,59 @@ app.add_middleware(
 app.include_router(crawler_router, prefix="/api")
 app.include_router(data_router, prefix="/api")
 app.include_router(websocket_router, prefix="/api")
+
+
+# --- Global Exception Handlers ---
+
+@app.exception_handler(CrawlerApiException)
+async def crawler_api_exception_handler(request: Request, exc: CrawlerApiException):
+    """Handle structured crawler exceptions."""
+    response = ApiResponse.fail(
+        code=exc.code,
+        message=exc.message,
+        description=exc.description,
+        platform=exc.platform,
+        retry_after_seconds=exc.retry_after_seconds,
+    )
+    return JSONResponse(status_code=exc.status_code, content=response.model_dump())
+
+
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+    """Wrap FastAPI/Starlette HTTPExceptions into structured response."""
+    code_map = {
+        400: ErrorCode.VALIDATION_ERROR,
+        403: ErrorCode.PERMISSION_DENIED,
+        404: ErrorCode.NOT_FOUND,
+        500: ErrorCode.UNKNOWN_ERROR,
+    }
+    error_code = code_map.get(exc.status_code, ErrorCode.UNKNOWN_ERROR)
+    response = ApiResponse.fail(code=error_code, message=str(exc.detail))
+    return JSONResponse(status_code=exc.status_code, content=response.model_dump())
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """Handle Pydantic request validation errors."""
+    messages = []
+    for error in exc.errors():
+        loc = " -> ".join(str(l) for l in error["loc"])
+        messages.append(f"{loc}: {error['msg']}")
+    response = ApiResponse.fail(
+        code=ErrorCode.VALIDATION_ERROR,
+        message="Request validation failed: " + "; ".join(messages),
+    )
+    return JSONResponse(status_code=422, content=response.model_dump())
+
+
+@app.exception_handler(Exception)
+async def generic_exception_handler(request: Request, exc: Exception):
+    """Catch-all for unhandled exceptions."""
+    response = ApiResponse.fail(
+        code=ErrorCode.UNKNOWN_ERROR,
+        message=f"{type(exc).__name__}: {str(exc) or 'Unknown error'}",
+    )
+    return JSONResponse(status_code=500, content=response.model_dump())
 
 
 @app.get("/")

@@ -17,7 +17,7 @@
 # 使用本代码即表示您同意遵守上述原则和LICENSE中的所有条款。
 
 from enum import Enum
-from typing import Optional, Literal
+from typing import Any, Dict, Optional, Literal
 from pydantic import BaseModel, Field
 
 
@@ -85,14 +85,17 @@ class CrawlerStatusResponse(BaseModel):
     crawler_type: Optional[str] = None
     started_at: Optional[str] = None
     error_message: Optional[str] = None
+    progress: Optional[Dict[str, Any]] = None
 
 
 class LogEntry(BaseModel):
     """Log entry"""
     id: int
     timestamp: str
-    level: Literal["info", "warning", "error", "success", "debug"]
+    level: Literal["info", "warning", "error", "success", "debug", "progress"]
     message: str
+    progress: Optional[Dict[str, Any]] = None
+    error_code: Optional[str] = None
 
 
 class DataFileInfo(BaseModel):

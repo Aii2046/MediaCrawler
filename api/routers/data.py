@@ -21,8 +21,12 @@ import json
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 from fastapi.responses import FileResponse
+
+from ..schemas.response import ApiResponse
+from ..exceptions import CrawlerApiException
+from ..schemas.response import ErrorCode
 
 router = APIRouter(prefix="/data", tags=["data"])
 
@@ -62,7 +66,7 @@ def get_file_info(file_path: Path) -> dict:
 async def list_data_files(platform: Optional[str] = None, file_type: Optional[str] = None):
     """Get data file list"""
     if not DATA_DIR.exists():
-        return {"files": []}
+        return ApiResponse.ok({"files": []}).model_dump()
 
     files = []
     supported_extensions = {".json", ".csv", ".xlsx", ".xls"}
@@ -92,7 +96,7 @@ async def list_data_files(platform: Optional[str] = None, file_type: Optional[st
     # Sort by modification time (newest first)
     files.sort(key=lambda x: x["modified_at"], reverse=True)
 
-    return {"files": files}
+    return ApiResponse.ok({"files": files}).model_dump()
 
 
 @router.get("/files/{file_path:path}")
@@ -101,16 +105,28 @@ async def get_file_content(file_path: str, preview: bool = True, limit: int = 10
     full_path = DATA_DIR / file_path
 
     if not full_path.exists():
-        raise HTTPException(status_code=404, detail="File not found")
+        raise CrawlerApiException(
+            code=ErrorCode.FILE_NOT_FOUND,
+            message=f"File not found: {file_path}",
+            status_code=404,
+        )
 
     if not full_path.is_file():
-        raise HTTPException(status_code=400, detail="Not a file")
+        raise CrawlerApiException(
+            code=ErrorCode.VALIDATION_ERROR,
+            message="Not a file",
+            status_code=400,
+        )
 
     # Security check: ensure within DATA_DIR
     try:
         full_path.resolve().relative_to(DATA_DIR.resolve())
     except ValueError:
-        raise HTTPException(status_code=403, detail="Access denied")
+        raise CrawlerApiException(
+            code=ErrorCode.FILE_ACCESS_DENIED,
+            message="Access denied",
+            status_code=403,
+        )
 
     if preview:
         # Return preview data
@@ -119,8 +135,8 @@ async def get_file_content(file_path: str, preview: bool = True, limit: int = 10
                 with open(full_path, "r", encoding="utf-8") as f:
                     data = json.load(f)
                     if isinstance(data, list):
-                        return {"data": data[:limit], "total": len(data)}
-                    return {"data": data, "total": 1}
+                        return ApiResponse.ok({"data": data[:limit], "total": len(data)}).model_dump()
+                    return ApiResponse.ok({"data": data, "total": 1}).model_dump()
             elif full_path.suffix == ".csv":
                 import csv
                 with open(full_path, "r", encoding="utf-8") as f:
@@ -133,7 +149,7 @@ async def get_file_content(file_path: str, preview: bool = True, limit: int = 10
                     # Re-read to get total count
                     f.seek(0)
                     total = sum(1 for _ in f) - 1
-                    return {"data": rows, "total": total}
+                    return ApiResponse.ok({"data": rows, "total": total}).model_dump()
             elif full_path.suffix.lower() in (".xlsx", ".xls"):
                 import pandas as pd
                 # Read first limit rows
@@ -143,17 +159,31 @@ async def get_file_content(file_path: str, preview: bool = True, limit: int = 10
                 total = len(df_count)
                 # Convert to list of dictionaries, handle NaN values
                 rows = df.where(pd.notnull(df), None).to_dict(orient='records')
-                return {
+                return ApiResponse.ok({
                     "data": rows,
                     "total": total,
                     "columns": list(df.columns)
-                }
+                }).model_dump()
             else:
-                raise HTTPException(status_code=400, detail="Unsupported file type for preview")
+                raise CrawlerApiException(
+                    code=ErrorCode.FILE_TYPE_UNSUPPORTED,
+                    message="Unsupported file type for preview",
+                    status_code=400,
+                )
+        except CrawlerApiException:
+            raise
         except json.JSONDecodeError:
-            raise HTTPException(status_code=400, detail="Invalid JSON file")
+            raise CrawlerApiException(
+                code=ErrorCode.FILE_PARSE_ERROR,
+                message="Invalid JSON file",
+                status_code=400,
+            )
         except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
+            raise CrawlerApiException(
+                code=ErrorCode.FILE_PARSE_ERROR,
+                message=str(e),
+                status_code=500,
+            )
     else:
         # Return file download
         return FileResponse(
@@ -169,16 +199,28 @@ async def download_file(file_path: str):
     full_path = DATA_DIR / file_path
 
     if not full_path.exists():
-        raise HTTPException(status_code=404, detail="File not found")
+        raise CrawlerApiException(
+            code=ErrorCode.FILE_NOT_FOUND,
+            message=f"File not found: {file_path}",
+            status_code=404,
+        )
 
     if not full_path.is_file():
-        raise HTTPException(status_code=400, detail="Not a file")
+        raise CrawlerApiException(
+            code=ErrorCode.VALIDATION_ERROR,
+            message="Not a file",
+            status_code=400,
+        )
 
     # Security check
     try:
         full_path.resolve().relative_to(DATA_DIR.resolve())
     except ValueError:
-        raise HTTPException(status_code=403, detail="Access denied")
+        raise CrawlerApiException(
+            code=ErrorCode.FILE_ACCESS_DENIED,
+            message="Access denied",
+            status_code=403,
+        )
 
     return FileResponse(
         path=full_path,
@@ -191,7 +233,7 @@ async def download_file(file_path: str):
 async def get_data_stats():
     """Get data statistics"""
     if not DATA_DIR.exists():
-        return {"total_files": 0, "total_size": 0, "by_platform": {}, "by_type": {}}
+        return ApiResponse.ok({"total_files": 0, "total_size": 0, "by_platform": {}, "by_type": {}}).model_dump()
 
     stats = {
         "total_files": 0,
@@ -227,4 +269,4 @@ async def get_data_stats():
             except Exception:
                 continue
 
-    return stats
+    return ApiResponse.ok(stats).model_dump()

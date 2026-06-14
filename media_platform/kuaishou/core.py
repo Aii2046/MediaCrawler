@@ -41,6 +41,7 @@ from store import kuaishou as kuaishou_store
 from tools import utils
 from tools.cdp_browser import CDPBrowserManager
 from var import comment_tasks_var, crawler_type_var, source_keyword_var
+from tools.progress import CrawlStage, emit_progress
 
 from .client import KuaiShouClient
 from .exception import DataFetchError
@@ -95,9 +96,11 @@ class KuaishouCrawler(AbstractCrawler):
 
             self.context_page = await self.browser_context.new_page()
             await self.context_page.goto(f"{self.index_url}?isHome=1")
+            emit_progress(CrawlStage.INITIALIZING, message="Launching browser for Kuaishou")
 
             # Create a client to interact with the kuaishou website.
             self.ks_client = await self.create_ks_client(httpx_proxy_format)
+            emit_progress(CrawlStage.LOGIN, message="Checking Kuaishou login state")
             if not await self.ks_client.pong():
                 login_obj = KuaishouLogin(
                     login_type=config.LOGIN_TYPE,
@@ -126,6 +129,7 @@ class KuaishouCrawler(AbstractCrawler):
                 pass
 
             utils.logger.info("[KuaishouCrawler.start] Kuaishou Crawler finished ...")
+            emit_progress(CrawlStage.COMPLETED, message="Kuaishou crawl finished")
 
     async def search(self):
         utils.logger.info("[KuaishouCrawler.search] Begin search kuaishou keywords")
@@ -150,6 +154,7 @@ class KuaishouCrawler(AbstractCrawler):
                 utils.logger.info(
                     f"[KuaishouCrawler.search] search kuaishou keyword: {keyword}, page: {page}"
                 )
+                emit_progress(CrawlStage.SEARCHING, current=page, total=config.CRAWLER_MAX_NOTES_COUNT // ks_limit_count, message=f"Searching keyword: {keyword}, page {page}", keyword=keyword, page=page)
                 video_id_list: List[str] = []
                 videos_res = await self.ks_client.search_info_by_keyword(
                     keyword=keyword,
@@ -200,6 +205,7 @@ class KuaishouCrawler(AbstractCrawler):
             self.get_video_info_task(video_id=video_id, semaphore=semaphore)
             for video_id in video_ids
         ]
+        emit_progress(CrawlStage.FETCHING_DETAILS, current=0, total=len(video_ids), message="Fetching video details")
         video_details = await asyncio.gather(*task_list)
         for video_detail in video_details:
             if video_detail is not None:
@@ -226,6 +232,7 @@ class KuaishouCrawler(AbstractCrawler):
                 utils.logger.error(
                     f"[KuaishouCrawler.get_video_info_task] Get video detail error: {ex}"
                 )
+                emit_progress(CrawlStage.FAILED, error_code="ERR_4001", message=f"Failed to fetch video detail: {ex}")
                 return None
             except KeyError as ex:
                 utils.logger.error(
@@ -248,6 +255,7 @@ class KuaishouCrawler(AbstractCrawler):
         utils.logger.info(
             f"[KuaishouCrawler.batch_get_video_comments] video ids:{video_id_list}"
         )
+        emit_progress(CrawlStage.FETCHING_COMMENTS, current=0, total=len(video_id_list), message=f"Fetching comments for {len(video_id_list)} videos")
         semaphore = asyncio.Semaphore(config.MAX_CONCURRENCY_NUM)
         task_list: List[Task] = []
         for video_id in video_id_list:
@@ -286,6 +294,7 @@ class KuaishouCrawler(AbstractCrawler):
                 utils.logger.error(
                     f"[KuaishouCrawler.get_comments] get video_id: {video_id} comment error: {ex}"
                 )
+                emit_progress(CrawlStage.FAILED, error_code="ERR_4001", message=f"Failed to fetch comments for video {video_id}: {ex}")
             except Exception as e:
                 utils.logger.error(
                     f"[KuaishouCrawler.get_comments] may be been blocked, err:{e}"

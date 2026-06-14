@@ -43,6 +43,7 @@ from store import weibo as weibo_store
 from tools import utils
 from tools.cdp_browser import CDPBrowserManager
 from var import crawler_type_var, source_keyword_var
+from tools.progress import CrawlStage, emit_progress
 
 from .client import WeiboClient
 from .exception import DataFetchError
@@ -96,10 +97,12 @@ class WeiboCrawler(AbstractCrawler):
             self.context_page = await self.browser_context.new_page()
             await self.context_page.goto(self.index_url)
             await asyncio.sleep(2)
+            emit_progress(CrawlStage.INITIALIZING, message="Launching browser for Weibo")
 
 
             # Create a client to interact with the xiaohongshu website.
             self.wb_client = await self.create_weibo_client(httpx_proxy_format)
+            emit_progress(CrawlStage.LOGIN, message="Checking Weibo login state")
             if not await self.wb_client.pong():
                 login_obj = WeiboLogin(
                     login_type=config.LOGIN_TYPE,
@@ -133,6 +136,7 @@ class WeiboCrawler(AbstractCrawler):
             else:
                 pass
             utils.logger.info("[WeiboCrawler.start] Weibo Crawler finished ...")
+            emit_progress(CrawlStage.COMPLETED, message="Weibo crawl finished")
 
     async def search(self):
         """
@@ -168,6 +172,7 @@ class WeiboCrawler(AbstractCrawler):
                     page += 1
                     continue
                 utils.logger.info(f"[WeiboCrawler.search] search weibo keyword: {keyword}, page: {page}")
+                emit_progress(CrawlStage.SEARCHING, current=page, total=config.CRAWLER_MAX_NOTES_COUNT // weibo_limit_count, message=f"Searching keyword: {keyword}, page {page}", keyword=keyword, page=page)
                 search_res = await self.wb_client.get_note_by_keyword(keyword=keyword, page=page, search_type=search_type)
                 note_id_list: List[str] = []
                 note_list = filter_search_result_card(search_res.get("cards"))
@@ -196,6 +201,7 @@ class WeiboCrawler(AbstractCrawler):
         """
         semaphore = asyncio.Semaphore(config.MAX_CONCURRENCY_NUM)
         task_list = [self.get_note_info_task(note_id=note_id, semaphore=semaphore) for note_id in config.WEIBO_SPECIFIED_ID_LIST]
+        emit_progress(CrawlStage.FETCHING_DETAILS, current=0, total=len(config.WEIBO_SPECIFIED_ID_LIST), message="Fetching post details")
         video_details = await asyncio.gather(*task_list)
         for note_item in video_details:
             if note_item:
@@ -220,6 +226,7 @@ class WeiboCrawler(AbstractCrawler):
                 return result
             except DataFetchError as ex:
                 utils.logger.error(f"[WeiboCrawler.get_note_info_task] Get note detail error: {ex}")
+                emit_progress(CrawlStage.FAILED, error_code="ERR_4001", message=f"Failed to fetch note detail: {ex}")
                 return None
             except KeyError as ex:
                 utils.logger.error(f"[WeiboCrawler.get_note_info_task] have not fund note detail note_id:{note_id}, err: {ex}")
@@ -236,6 +243,7 @@ class WeiboCrawler(AbstractCrawler):
             return
 
         utils.logger.info(f"[WeiboCrawler.batch_get_notes_comments] note ids:{note_id_list}")
+        emit_progress(CrawlStage.FETCHING_COMMENTS, current=0, total=len(note_id_list), message=f"Fetching comments for {len(note_id_list)} posts")
         semaphore = asyncio.Semaphore(config.MAX_CONCURRENCY_NUM)
         task_list: List[Task] = []
         for note_id in note_id_list:
@@ -266,6 +274,7 @@ class WeiboCrawler(AbstractCrawler):
                 )
             except DataFetchError as ex:
                 utils.logger.error(f"[WeiboCrawler.get_note_comments] get note_id: {note_id} comment error: {ex}")
+                emit_progress(CrawlStage.FAILED, error_code="ERR_4001", message=f"Failed to fetch comments for note {note_id}: {ex}")
             except Exception as e:
                 utils.logger.error(f"[WeiboCrawler.get_note_comments] may be been blocked, err:{e}")
 

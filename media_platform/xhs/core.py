@@ -39,6 +39,7 @@ from proxy.proxy_ip_pool import IpInfoModel, create_ip_pool
 from store import xhs as xhs_store
 from tools import utils
 from tools.cdp_browser import CDPBrowserManager
+from tools.progress import CrawlStage, emit_progress
 from var import crawler_type_var, source_keyword_var
 
 from .client import XiaoHongShuClient
@@ -70,6 +71,7 @@ class XiaoHongShuCrawler(AbstractCrawler):
             playwright_proxy_format, httpx_proxy_format = utils.format_proxy_info(ip_proxy_info)
 
         async with async_playwright() as playwright:
+            emit_progress(CrawlStage.INITIALIZING, message="Launching browser for XiaoHongShu")
             # Choose launch mode based on configuration
             if config.ENABLE_CDP_MODE:
                 utils.logger.info("[XiaoHongShuCrawler] Launching browser using CDP mode")
@@ -97,6 +99,7 @@ class XiaoHongShuCrawler(AbstractCrawler):
 
             # Create a client to interact with the Xiaohongshu website.
             self.xhs_client = await self.create_xhs_client(httpx_proxy_format)
+            emit_progress(CrawlStage.LOGIN, message="Checking XiaoHongShu login state")
             if not await self.xhs_client.pong():
                 login_obj = XiaoHongShuLogin(
                     login_type=config.LOGIN_TYPE,
@@ -125,6 +128,7 @@ class XiaoHongShuCrawler(AbstractCrawler):
                 pass
 
             utils.logger.info("[XiaoHongShuCrawler.start] Xhs Crawler finished ...")
+            emit_progress(CrawlStage.COMPLETED, message="XiaoHongShu crawl finished")
 
     async def search(self) -> None:
         """Search for notes and retrieve their comment information."""
@@ -138,6 +142,7 @@ class XiaoHongShuCrawler(AbstractCrawler):
             utils.logger.info(f"[XiaoHongShuCrawler.search] Current search keyword: {keyword}")
             page = 1
             search_id = get_search_id()
+            max_pages = config.CRAWLER_MAX_NOTES_COUNT // xhs_limit_count
             while (page - start_page + 1) * xhs_limit_count <= config.CRAWLER_MAX_NOTES_COUNT:
                 if page < start_page:
                     utils.logger.info(f"[XiaoHongShuCrawler.search] Skip page {page}")
@@ -145,6 +150,14 @@ class XiaoHongShuCrawler(AbstractCrawler):
                     continue
 
                 try:
+                    emit_progress(
+                        CrawlStage.SEARCHING,
+                        current=page - start_page + 1,
+                        total=max_pages,
+                        message=f"Searching keyword: {keyword}, page {page}",
+                        keyword=keyword,
+                        page=page,
+                    )
                     utils.logger.info(f"[XiaoHongShuCrawler.search] search Xiaohongshu keyword: {keyword}, page: {page}")
                     note_ids: List[str] = []
                     xsec_tokens: List[str] = []
@@ -183,6 +196,7 @@ class XiaoHongShuCrawler(AbstractCrawler):
                     utils.logger.info(f"[XiaoHongShuCrawler.search] Sleeping for {config.CRAWLER_MAX_SLEEP_SEC} seconds after page {page-1}")
                 except DataFetchError:
                     utils.logger.error("[XiaoHongShuCrawler.search] Get note detail error")
+                    emit_progress(CrawlStage.FAILED, error_code="ERR_4001", message="Failed to fetch note details")
                     break
 
     async def get_creators_and_notes(self) -> None:
@@ -328,6 +342,12 @@ class XiaoHongShuCrawler(AbstractCrawler):
             utils.logger.info(f"[XiaoHongShuCrawler.batch_get_note_comments] Crawling comment mode is not enabled")
             return
 
+        emit_progress(
+            CrawlStage.FETCHING_COMMENTS,
+            current=0,
+            total=len(note_list),
+            message=f"Fetching comments for {len(note_list)} notes",
+        )
         utils.logger.info(f"[XiaoHongShuCrawler.batch_get_note_comments] Begin batch get note comments, note list: {note_list}")
         semaphore = asyncio.Semaphore(config.MAX_CONCURRENCY_NUM)
         task_list: List[Task] = []

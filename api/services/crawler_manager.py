@@ -17,10 +17,11 @@
 # 使用本代码即表示您同意遵守上述原则和LICENSE中的所有条款。
 
 import asyncio
+import json
 import subprocess
 import signal
 import os
-from typing import Optional, List
+from typing import Any, Dict, Optional, List
 from datetime import datetime
 from pathlib import Path
 
@@ -43,6 +44,8 @@ class CrawlerManager:
         self._project_root = Path(__file__).parent.parent.parent
         # Log queue - for pushing to WebSocket
         self._log_queue: Optional[asyncio.Queue] = None
+        # Progress state from subprocess
+        self._progress: Dict[str, Any] = {}
 
     @property
     def logs(self) -> List[LogEntry]:
@@ -54,14 +57,22 @@ class CrawlerManager:
             self._log_queue = asyncio.Queue()
         return self._log_queue
 
-    def _create_log_entry(self, message: str, level: str = "info") -> LogEntry:
+    def _create_log_entry(
+        self,
+        message: str,
+        level: str = "info",
+        progress: Optional[Dict[str, Any]] = None,
+        error_code: Optional[str] = None,
+    ) -> LogEntry:
         """Create log entry"""
         self._log_id += 1
         entry = LogEntry(
             id=self._log_id,
             timestamp=datetime.now().strftime("%H:%M:%S"),
             level=level,
-            message=message
+            message=message,
+            progress=progress,
+            error_code=error_code,
         )
         self._logs.append(entry)
         # Keep last 500 logs
@@ -90,6 +101,42 @@ class CrawlerManager:
             return "debug"
         return "info"
 
+    def _try_parse_progress(self, line: str) -> bool:
+        """Try to parse a structured progress line from subprocess stdout.
+
+        Returns True if the line was a progress message (and updates self._progress).
+        """
+        try:
+            data = json.loads(line)
+            if isinstance(data, dict) and data.get("__progress__"):
+                self._progress = {
+                    k: v for k, v in data.items() if k != "__progress__"
+                }
+                return True
+        except (json.JSONDecodeError, TypeError):
+            pass
+        return False
+
+    # Known error patterns mapped to error codes
+    _ERROR_PATTERNS = {
+        "ERR_3001": ["300012", "ip block", "ip banned", "ip 被封"],
+        "ERR_3002": ["rate limit", "too many requests", "429", "请求过于频繁"],
+        "ERR_3003": ["login expired", "need to login", "cookie expired",
+                      "登录过期", "请重新登录", "未登录"],
+        "ERR_3004": ["captcha", "verifytype", "验证码"],
+        "ERR_3005": ["account blocked", "account banned", "账号被封"],
+        "ERR_3006": ["proxy", "代理获取失败"],
+        "ERR_4002": ["note not found", "笔记不存在", "does not exist"],
+    }
+
+    def _detect_error_code(self, line: str) -> Optional[str]:
+        """Detect structured error codes from known log line patterns."""
+        line_lower = line.lower()
+        for code, keywords in self._ERROR_PATTERNS.items():
+            if any(kw.lower() in line_lower for kw in keywords):
+                return code
+        return None
+
     async def start(self, config: CrawlerStartRequest) -> bool:
         """Start crawler process"""
         async with self._lock:
@@ -99,6 +146,7 @@ class CrawlerManager:
             # Clear old logs
             self._logs = []
             self._log_id = 0
+            self._progress = {}
 
             # Clear pending queue (don't replace object to avoid WebSocket broadcast coroutine holding old queue reference)
             if self._log_queue is None:
@@ -193,13 +241,14 @@ class CrawlerManager:
             return True
 
     def get_status(self) -> dict:
-        """Get current status"""
+        """Get current status with progress information"""
         return {
             "status": self.status,
             "platform": self.current_config.platform.value if self.current_config else None,
             "crawler_type": self.current_config.crawler_type.value if self.current_config else None,
             "started_at": self.started_at.isoformat() if self.started_at else None,
-            "error_message": None
+            "error_message": None,
+            "progress": self._progress if self._progress else None,
         }
 
     def _build_command(self, config: CrawlerStartRequest) -> list:
@@ -251,9 +300,23 @@ class CrawlerManager:
                 if line:
                     line = line.strip()
                     if line:
-                        level = self._parse_log_level(line)
-                        entry = self._create_log_entry(line, level)
-                        await self._push_log(entry)
+                        # Check if this is a structured progress line
+                        if self._try_parse_progress(line):
+                            stage_desc = self._progress.get("stage_description", "")
+                            msg = self._progress.get("message", "") or stage_desc
+                            entry = self._create_log_entry(
+                                msg, level="progress", progress=self._progress
+                            )
+                            await self._push_log(entry)
+                        else:
+                            level = self._parse_log_level(line)
+                            error_code = None
+                            if level == "error":
+                                error_code = self._detect_error_code(line)
+                            entry = self._create_log_entry(
+                                line, level, error_code=error_code
+                            )
+                            await self._push_log(entry)
 
             # Read remaining output
             if self.process and self.process.stdout:
@@ -263,8 +326,21 @@ class CrawlerManager:
                 if remaining:
                     for line in remaining.strip().split('\n'):
                         if line.strip():
-                            level = self._parse_log_level(line)
-                            entry = self._create_log_entry(line.strip(), level)
+                            line = line.strip()
+                            if self._try_parse_progress(line):
+                                stage_desc = self._progress.get("stage_description", "")
+                                msg = self._progress.get("message", "") or stage_desc
+                                entry = self._create_log_entry(
+                                    msg, level="progress", progress=self._progress
+                                )
+                            else:
+                                level = self._parse_log_level(line)
+                                error_code = None
+                                if level == "error":
+                                    error_code = self._detect_error_code(line)
+                                entry = self._create_log_entry(
+                                    line, level, error_code=error_code
+                                )
                             await self._push_log(entry)
 
             # Process ended

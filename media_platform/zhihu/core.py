@@ -41,6 +41,7 @@ from proxy.proxy_ip_pool import IpInfoModel, create_ip_pool
 from store import zhihu as zhihu_store
 from tools import utils
 from tools.cdp_browser import CDPBrowserManager
+from tools.progress import CrawlStage, emit_progress
 from var import crawler_type_var, source_keyword_var
 
 from .client import ZhiHuClient
@@ -100,11 +101,13 @@ class ZhihuCrawler(AbstractCrawler):
                 # stealth.min.js is a js script to prevent the website from detecting the crawler.
                 await self.browser_context.add_init_script(path="libs/stealth.min.js")
 
+            emit_progress(CrawlStage.INITIALIZING, message="Launching browser for Zhihu")
             self.context_page = await self.browser_context.new_page()
             await self.context_page.goto(self.index_url, wait_until="domcontentloaded")
 
             # Create a client to interact with the zhihu website.
             self.zhihu_client = await self.create_zhihu_client(httpx_proxy_format)
+            emit_progress(CrawlStage.LOGIN, message="Checking Zhihu login state")
             if not await self.zhihu_client.pong():
                 login_obj = ZhiHuLogin(
                     login_type=config.LOGIN_TYPE,
@@ -146,6 +149,7 @@ class ZhihuCrawler(AbstractCrawler):
                 pass
 
             utils.logger.info("[ZhihuCrawler.start] Zhihu Crawler finished ...")
+            emit_progress(CrawlStage.COMPLETED, message="Zhihu crawl finished")
 
     async def search(self) -> None:
         """Search for notes and retrieve their comment information."""
@@ -172,6 +176,7 @@ class ZhihuCrawler(AbstractCrawler):
                     utils.logger.info(
                         f"[ZhihuCrawler.search] search zhihu keyword: {keyword}, page: {page}"
                     )
+                    emit_progress(CrawlStage.SEARCHING, current=page, total=0, message=f"Searching keyword: {keyword}, page {page}", keyword=keyword, page=page)
                     content_list: List[ZhihuContent] = (
                         await self.zhihu_client.get_note_by_keyword(
                             keyword=keyword,
@@ -196,6 +201,7 @@ class ZhihuCrawler(AbstractCrawler):
                     await self.batch_get_content_comments(content_list)
                 except DataFetchError:
                     utils.logger.error("[ZhihuCrawler.search] Search content error")
+                    emit_progress(CrawlStage.FAILED, error_code="ERR_4001", message="Search content fetch error")
                     return
 
     async def batch_get_content_comments(self, content_list: List[ZhihuContent]):
@@ -213,6 +219,7 @@ class ZhihuCrawler(AbstractCrawler):
             )
             return
 
+        emit_progress(CrawlStage.FETCHING_COMMENTS, current=0, total=len(content_list), message=f"Fetching comments for {len(content_list)} contents")
         semaphore = asyncio.Semaphore(config.MAX_CONCURRENCY_NUM)
         task_list: List[Task] = []
         for content_item in content_list:
@@ -368,6 +375,7 @@ class ZhihuCrawler(AbstractCrawler):
         Returns:
 
         """
+        emit_progress(CrawlStage.FETCHING_DETAILS, current=0, total=len(config.ZHIHU_SPECIFIED_ID_LIST), message="Fetching content details")
         get_note_detail_task_list = []
         for full_note_url in config.ZHIHU_SPECIFIED_ID_LIST:
             # remove query params

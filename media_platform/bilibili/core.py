@@ -45,6 +45,7 @@ from proxy.proxy_ip_pool import IpInfoModel, create_ip_pool
 from store import bilibili as bilibili_store
 from tools import utils
 from tools.cdp_browser import CDPBrowserManager
+from tools.progress import CrawlStage, emit_progress
 from var import crawler_type_var, source_keyword_var
 
 from .client import BilibiliClient
@@ -94,9 +95,11 @@ class BilibiliCrawler(AbstractCrawler):
 
             self.context_page = await self.browser_context.new_page()
             await self.context_page.goto(self.index_url)
+            emit_progress(CrawlStage.INITIALIZING, message="Launching browser for Bilibili")
 
             # Create a client to interact with the xiaohongshu website.
             self.bili_client = await self.create_bilibili_client(httpx_proxy_format)
+            emit_progress(CrawlStage.LOGIN, message="Checking Bilibili login state")
             if not await self.bili_client.pong():
                 login_obj = BilibiliLogin(
                     login_type=config.LOGIN_TYPE,
@@ -131,6 +134,7 @@ class BilibiliCrawler(AbstractCrawler):
                     await self.get_all_creator_details(config.BILI_CREATOR_ID_LIST)
             else:
                 pass
+            emit_progress(CrawlStage.COMPLETED, message="Bilibili crawl finished")
             utils.logger.info("[BilibiliCrawler.start] Bilibili Crawler finished ...")
 
     async def search(self):
@@ -201,6 +205,7 @@ class BilibiliCrawler(AbstractCrawler):
                     continue
 
                 utils.logger.info(f"[BilibiliCrawler.search_by_keywords] search bilibili keyword: {keyword}, page: {page}")
+                emit_progress(CrawlStage.SEARCHING, current=page, total=0, message=f"Searching keyword: {keyword}, page {page}", keyword=keyword, page=page)
                 video_id_list: List[str] = []
                 videos_res = await self.bili_client.search_video_by_keyword(
                     keyword=keyword,
@@ -276,6 +281,7 @@ class BilibiliCrawler(AbstractCrawler):
 
                     try:
                         utils.logger.info(f"[BilibiliCrawler.search] search bilibili keyword: {keyword}, date: {day.ctime()}, page: {page}")
+                        emit_progress(CrawlStage.SEARCHING, current=page, total=0, message=f"Searching keyword: {keyword}, page {page}", keyword=keyword, page=page)
                         video_id_list: List[str] = []
                         videos_res = await self.bili_client.search_video_by_keyword(
                             keyword=keyword,
@@ -332,6 +338,7 @@ class BilibiliCrawler(AbstractCrawler):
             utils.logger.info(f"[BilibiliCrawler.batch_get_note_comments] Crawling comment mode is not enabled")
             return
 
+        emit_progress(CrawlStage.FETCHING_COMMENTS, current=0, total=len(video_id_list), message=f"Fetching comments for {len(video_id_list)} videos")
         utils.logger.info(f"[BilibiliCrawler.batch_get_video_comments] video ids:{video_id_list}")
         semaphore = asyncio.Semaphore(config.MAX_CONCURRENCY_NUM)
         task_list: List[Task] = []
@@ -362,6 +369,7 @@ class BilibiliCrawler(AbstractCrawler):
 
             except DataFetchError as ex:
                 utils.logger.error(f"[BilibiliCrawler.get_comments] get video_id: {video_id} comment error: {ex}")
+                emit_progress(CrawlStage.FAILED, error_code="ERR_4001", message=f"Get comments failed for video: {video_id}")
             except Exception as e:
                 utils.logger.error(f"[BilibiliCrawler.get_comments] may be been blocked, err:{e}")
                 # Propagate the exception to be caught by the main loop
@@ -401,6 +409,7 @@ class BilibiliCrawler(AbstractCrawler):
                 utils.logger.error(f"[BilibiliCrawler.get_specified_videos] Failed to parse video URL: {e}")
                 continue
 
+        emit_progress(CrawlStage.FETCHING_DETAILS, current=0, total=len(bvids_list), message="Fetching video details")
         semaphore = asyncio.Semaphore(config.MAX_CONCURRENCY_NUM)
         task_list = [self.get_video_info_task(aid=0, bvid=video_id, semaphore=semaphore) for video_id in bvids_list]
         video_details = await asyncio.gather(*task_list)
@@ -435,6 +444,7 @@ class BilibiliCrawler(AbstractCrawler):
                 return result
             except DataFetchError as ex:
                 utils.logger.error(f"[BilibiliCrawler.get_video_info_task] Get video detail error: {ex}")
+                emit_progress(CrawlStage.FAILED, error_code="ERR_4001", message=f"Get video detail error: {ex}")
                 return None
             except KeyError as ex:
                 utils.logger.error(f"[BilibiliCrawler.get_video_info_task] have not fund note detail video_id:{bvid}, err: {ex}")

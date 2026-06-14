@@ -38,6 +38,7 @@ from proxy.proxy_ip_pool import IpInfoModel, ProxyIpPool, create_ip_pool
 from store import tieba as tieba_store
 from tools import utils
 from tools.cdp_browser import CDPBrowserManager
+from tools.progress import CrawlStage, emit_progress
 from var import crawler_type_var, source_keyword_var
 
 from .client import BaiduTieBaClient
@@ -100,6 +101,8 @@ class TieBaCrawler(AbstractCrawler):
                     headless=config.HEADLESS,
                 )
 
+            emit_progress(CrawlStage.INITIALIZING, message="Launching browser for Tieba")
+
             # Inject anti-detection scripts - for Baidu's special detection
             await self._inject_anti_detection_scripts()
 
@@ -115,6 +118,7 @@ class TieBaCrawler(AbstractCrawler):
             )
 
             # Check login status and perform login if necessary
+            emit_progress(CrawlStage.LOGIN, message="Checking Tieba login state")
             if not await self.tieba_client.pong(browser_context=self.browser_context):
                 login_obj = BaiduTieBaLogin(
                     login_type=config.LOGIN_TYPE,
@@ -144,6 +148,7 @@ class TieBaCrawler(AbstractCrawler):
                 pass
 
             utils.logger.info("[BaiduTieBaCrawler.start] Tieba Crawler finished ...")
+            emit_progress(CrawlStage.COMPLETED, message="Tieba crawl finished")
 
     async def search(self) -> None:
         """
@@ -175,6 +180,7 @@ class TieBaCrawler(AbstractCrawler):
                     utils.logger.info(
                         f"[BaiduTieBaCrawler.search] search tieba keyword: {keyword}, page: {page}"
                     )
+                    emit_progress(CrawlStage.SEARCHING, current=page, total=0, message=f"Searching keyword: {keyword}, page {page}", keyword=keyword, page=page)
                     notes_list: List[TiebaNote] = (
                         await self.tieba_client.get_notes_by_keyword(
                             keyword=keyword,
@@ -205,6 +211,7 @@ class TieBaCrawler(AbstractCrawler):
                     utils.logger.error(
                         f"[BaiduTieBaCrawler.search] Search keywords error, current page: {page}, current keyword: {keyword}, err: {ex}"
                     )
+                    emit_progress(CrawlStage.FAILED, error_code="ERR_4001", message=f"Search error on page {page} for keyword {keyword}: {ex}")
                     break
 
     async def get_specified_tieba_notes(self):
@@ -257,6 +264,7 @@ class TieBaCrawler(AbstractCrawler):
         """
         if note_id_list is None:
             note_id_list = config.TIEBA_SPECIFIED_ID_LIST
+        emit_progress(CrawlStage.FETCHING_DETAILS, current=0, total=len(note_id_list), message="Fetching post details")
         semaphore = asyncio.Semaphore(config.MAX_CONCURRENCY_NUM)
         task_list = [
             self.get_note_detail_async_task(note_id=note_id, semaphore=semaphore)
@@ -322,6 +330,7 @@ class TieBaCrawler(AbstractCrawler):
         if not config.ENABLE_GET_COMMENTS:
             return
 
+        emit_progress(CrawlStage.FETCHING_COMMENTS, current=0, total=len(note_detail_list), message=f"Fetching comments for {len(note_detail_list)} posts")
         semaphore = asyncio.Semaphore(config.MAX_CONCURRENCY_NUM)
         task_list: List[Task] = []
         for note_detail in note_detail_list:
