@@ -1,0 +1,542 @@
+/* ============================================================
+   MediaCrawler WebUI - Mobile Responsive Overrides
+   Only active at viewport width <= 768px
+   ============================================================ */
+
+@media (max-width: 768px) {
+
+  /* ----------------------------------------------------------
+     Section 1: Root Layout - Make Page Scrollable
+     The root div uses h-screen + overflow-hidden which locks
+     content to viewport. On mobile we need natural scrolling.
+     ---------------------------------------------------------- */
+  .cyber-grid.h-screen {
+    height: auto !important;
+    min-height: 100vh;
+    min-height: 100dvh;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+  }
+
+  /* ----------------------------------------------------------
+     Section 2: Header - Compact & Touch-Friendly
+     ---------------------------------------------------------- */
+  header.h-14 {
+    height: auto !important;
+    min-height: 3rem;
+    padding-top: 0.375rem;
+    padding-bottom: 0.375rem;
+  }
+
+  /* Header inner container: allow wrapping */
+  header.h-14 > div {
+    height: auto !important;
+    flex-wrap: wrap;
+    gap: 0.375rem;
+    padding-left: 0.625rem !important;
+    padding-right: 0.625rem !important;
+  }
+
+  /* Hide the disclaimer/warning banner button in header */
+  header.h-14 button[class*="border-cyber-neon-orange"] {
+    display: none !important;
+  }
+
+  /* Hide API version info (reinforcing lg:flex hiding) */
+  header .lg\:flex {
+    display: none !important;
+  }
+
+  /* Header small buttons: larger touch targets */
+  header button.h-7,
+  header button.w-20 {
+    height: 2.25rem !important;
+    min-height: 2.25rem;
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+  }
+
+  /* ----------------------------------------------------------
+     Section 3: Footer - Reduce Height
+     ---------------------------------------------------------- */
+  footer.h-24 {
+    height: auto !important;
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem;
+  }
+
+  footer.h-24 > div {
+    height: auto !important;
+    flex-wrap: wrap;
+    gap: 0.5rem !important;
+    padding-left: 0.75rem !important;
+    padding-right: 0.75rem !important;
+    justify-content: center;
+  }
+
+  /* Shrink avatar */
+  footer .w-14.h-14 {
+    width: 2.5rem !important;
+    height: 2.5rem !important;
+  }
+
+  /* Ensure author description stays hidden */
+  footer .sm\:inline {
+    display: none !important;
+  }
+
+  /* ----------------------------------------------------------
+     Section 4: Main Content Area
+     ---------------------------------------------------------- */
+  /* Content wrapper: allow natural height and scrolling */
+  .cyber-grid > div.flex-1.p-4,
+  .cyber-grid > div.flex-1.flex.flex-col {
+    overflow: visible !important;
+    min-height: auto !important;
+    flex: none !important;
+    padding: 0.625rem !important;
+    gap: 0.625rem !important;
+  }
+
+  /* Config panel wrapper */
+  .flex-shrink-0:has(> .grid) {
+    flex-shrink: 0;
+  }
+
+  /* ----------------------------------------------------------
+     Section 5: Config Panel Grid
+     ---------------------------------------------------------- */
+  /* Tighter gap on the config grid */
+  .grid.grid-cols-1 {
+    gap: 0.5rem !important;
+  }
+
+  /* Config section cards: compact padding */
+  .glass-panel.float-panel {
+    border-radius: 0.5rem;
+  }
+
+  /* Section content area: reduce padding */
+  .glass-panel.float-panel > div.p-4,
+  .glass-panel.float-panel div.p-4 {
+    padding: 0.75rem !important;
+  }
+
+  /* Section header: compact */
+  .glass-panel.float-panel > header {
+    padding: 0.5rem 0.75rem !important;
+  }
+
+  /* Section header icon container */
+  .glass-panel.float-panel > header .h-8.w-8 {
+    height: 1.75rem !important;
+    width: 1.75rem !important;
+  }
+
+  /* Tiny text: increase for readability */
+  .text-\[10px\] {
+    font-size: 11px !important;
+  }
+
+  .text-\[11px\] {
+    font-size: 12px !important;
+  }
+
+  /* ----------------------------------------------------------
+     Section 6: Touch-Friendly Inputs & Buttons
+     ---------------------------------------------------------- */
+
+  /* Prevent iOS auto-zoom on input focus (requires >= 16px) */
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+
+  /* Text inputs: increase height for touch */
+  input.h-9 {
+    height: 2.75rem !important;
+  }
+
+  /* Inputs with search icon */
+  input.pl-9 {
+    height: 2.75rem !important;
+  }
+
+  /* Textarea: taller minimum */
+  textarea.min-h-\[60px\] {
+    min-height: 80px !important;
+  }
+
+  textarea.min-h-\[80px\] {
+    min-height: 100px !important;
+  }
+
+  /* Select trigger buttons: increase height */
+  button[role="combobox"] {
+    height: 2.75rem !important;
+  }
+
+  /* Small buttons (h-7 = 28px): increase to 36px */
+  button.h-7 {
+    height: 2.25rem !important;
+    min-height: 2.25rem;
+  }
+
+  /* Standard buttons (h-9 = 36px): increase to 44px */
+  button.h-9 {
+    height: 2.75rem !important;
+  }
+
+  /* Large buttons (h-10 = 40px): increase to 44px */
+  button.h-10 {
+    height: 2.75rem !important;
+  }
+
+  /* Start/Stop button (h-12 = 48px): slight increase */
+  button.h-12 {
+    height: 3.25rem !important;
+    font-size: 1rem !important;
+  }
+
+  /* Checkboxes: larger for touch */
+  .h-4.w-4.rounded-sm.border {
+    width: 1.25rem !important;
+    height: 1.25rem !important;
+  }
+
+  /* Checkbox container: more padding */
+  .flex.items-center.gap-3.rounded-lg.border.p-2\.5 {
+    padding: 0.75rem !important;
+    min-height: 2.75rem;
+  }
+
+  /* Tag/chip remove buttons: larger touch target */
+  .flex.flex-wrap.gap-1\.5 button {
+    min-width: 1.75rem;
+    min-height: 1.75rem;
+    padding: 0.25rem;
+  }
+
+  /* Category filter buttons in Data Explorer */
+  button.px-3.py-1\.5.rounded-md.text-xs {
+    padding: 0.5rem 0.75rem !important;
+    font-size: 0.8125rem !important;
+    min-height: 2.25rem;
+  }
+
+  /* ----------------------------------------------------------
+     Section 7: Terminal Panel
+     ---------------------------------------------------------- */
+  /* Terminal wrapper: fixed height instead of flex-fill */
+  main.flex-1.flex.flex-col {
+    flex: none !important;
+    min-height: auto !important;
+    overflow: visible !important;
+  }
+
+  /* Terminal container: explicit mobile height */
+  main.flex-1 > div.flex.flex-col.rounded-lg.border,
+  main.flex-1 > div.border.rounded-lg {
+    height: 50vh !important;
+    min-height: 280px;
+    max-height: 60vh;
+    overflow: hidden;
+  }
+
+  /* Terminal when collapsed (h-12) */
+  main.flex-1 > div.h-12 {
+    height: 3rem !important;
+    min-height: 3rem !important;
+    max-height: 3rem !important;
+  }
+
+  /* Terminal header: better touch targets */
+  .bg-\[\#161b22\] button.h-7 {
+    height: 2.25rem !important;
+    width: auto !important;
+    min-width: 2.25rem;
+  }
+
+  /* Terminal header padding */
+  .bg-\[\#161b22\].border-b {
+    padding: 0.5rem 0.625rem !important;
+  }
+
+  /* Terminal footer status bar */
+  .bg-\[\#0d1117\] .px-4.py-2.border-t {
+    padding: 0.375rem 0.625rem !important;
+    font-size: 0.6875rem;
+  }
+
+  /* ----------------------------------------------------------
+     Section 8: Dialog / Modal Overrides
+     Radix UI dialogs use fixed positioning with inline styles.
+     We override with !important to make them full-screen.
+     ---------------------------------------------------------- */
+
+  /* Dialog content: full-screen on mobile */
+  .fixed.z-50.glass-panel-dark.float-panel.rounded-lg.p-6,
+  div[role="dialog"].fixed.z-50 {
+    width: 100vw !important;
+    max-width: 100vw !important;
+    height: 100vh !important;
+    height: 100dvh !important;
+    max-height: 100vh !important;
+    max-height: 100dvh !important;
+    top: 0 !important;
+    left: 0 !important;
+    transform: none !important;
+    border-radius: 0 !important;
+    padding: 1rem !important;
+    overflow-y: auto !important;
+  }
+
+  /* Dialog content via Radix data attributes */
+  [data-state="open"].fixed.z-50.glass-panel-dark {
+    width: 100vw !important;
+    max-width: 100vw !important;
+    height: 100vh !important;
+    height: 100dvh !important;
+    max-height: 100dvh !important;
+    top: 0 !important;
+    left: 0 !important;
+    transform: none !important;
+    border-radius: 0 !important;
+    padding: 1rem !important;
+    overflow-y: auto !important;
+  }
+
+  /* Also target by max-w classes used in dialogs */
+  .fixed.z-50.max-w-lg,
+  .fixed.z-50.max-w-md,
+  .fixed.z-50.max-w-2xl,
+  .fixed.z-50.max-w-5xl,
+  .fixed.z-50.max-w-6xl {
+    width: 100vw !important;
+    max-width: 100vw !important;
+    height: 100vh !important;
+    height: 100dvh !important;
+    max-height: 100dvh !important;
+    top: 0 !important;
+    left: 0 !important;
+    transform: none !important;
+    border-radius: 0 !important;
+    padding: 1rem !important;
+    overflow-y: auto !important;
+  }
+
+  /* Dialog close button: larger touch target */
+  .fixed.z-50 button.absolute.right-4.top-4 {
+    right: 0.5rem !important;
+    top: 0.5rem !important;
+    width: 2.75rem;
+    height: 2.75rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* Dialog close icon: larger */
+  .fixed.z-50 button.absolute.right-4.top-4 svg {
+    width: 1.25rem !important;
+    height: 1.25rem !important;
+  }
+
+  /* Dialog header: space for close button */
+  .flex.flex-col.space-y-1\.5.text-center {
+    text-align: left !important;
+    padding-right: 2.5rem;
+  }
+
+  /* Dialog footer: stack buttons vertically */
+  .flex.flex-col-reverse {
+    flex-direction: column !important;
+    gap: 0.5rem;
+  }
+
+  .flex.flex-col-reverse button {
+    width: 100% !important;
+    min-height: 2.75rem;
+  }
+
+  /* ----------------------------------------------------------
+     Section 9: Data Explorer Modal Specifics
+     ---------------------------------------------------------- */
+
+  /* Data explorer scroll area */
+  .max-h-\[calc\(85vh-100px\)\] {
+    max-height: calc(100dvh - 5rem) !important;
+  }
+
+  .max-h-\[85vh\] {
+    max-height: 100dvh !important;
+  }
+
+  /* File cards grid: single column */
+  .grid.md\:grid-cols-2,
+  .grid.lg\:grid-cols-3,
+  .grid.xl\:grid-cols-4 {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* File card padding */
+  .card-scan.group .p-4 {
+    padding: 0.75rem !important;
+  }
+
+  /* Make file card action buttons always visible (no hover needed) */
+  .card-scan .opacity-0.group-hover\:opacity-100 {
+    opacity: 1 !important;
+  }
+
+  /* Data table: horizontal scroll with smaller text */
+  .overflow-x-auto table {
+    font-size: 0.75rem;
+  }
+
+  /* ----------------------------------------------------------
+     Section 10: License & Environment Check Modals
+     ---------------------------------------------------------- */
+
+  /* License modal inner container */
+  .fixed.inset-0.z-\[100\] .max-w-2xl {
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 1rem !important;
+    border-radius: 0 !important;
+  }
+
+  /* Environment check modal */
+  .fixed.inset-0.z-50 .max-w-md {
+    max-width: calc(100% - 1.5rem) !important;
+    margin-left: 0.75rem !important;
+    margin-right: 0.75rem !important;
+  }
+
+  /* Modal buttons: full width and touch-friendly */
+  .fixed.inset-0 .flex.gap-3 button,
+  .fixed.inset-0 .flex.gap-4 button {
+    min-height: 2.75rem;
+    flex: 1;
+  }
+
+  /* ----------------------------------------------------------
+     Section 11: Select Dropdowns (Radix UI)
+     ---------------------------------------------------------- */
+
+  /* Radix select viewport: taller max */
+  [data-radix-select-viewport] {
+    max-height: 50vh !important;
+  }
+
+  /* Select content panel: wider */
+  .z-50.max-h-96.min-w-\[8rem\] {
+    min-width: 12rem !important;
+  }
+
+  /* Select items: taller for touch */
+  [role="option"] {
+    padding-top: 0.625rem !important;
+    padding-bottom: 0.625rem !important;
+    font-size: 0.875rem !important;
+  }
+
+  /* ----------------------------------------------------------
+     Section 12: Scrollbar & Miscellaneous
+     ---------------------------------------------------------- */
+
+  /* Thinner scrollbars on mobile */
+  ::-webkit-scrollbar {
+    width: 4px !important;
+    height: 4px !important;
+  }
+
+  /* Toast notifications: full width */
+  [data-sonner-toaster] {
+    width: 100% !important;
+    padding: 0 0.75rem !important;
+  }
+
+  [data-sonner-toast] {
+    width: 100% !important;
+  }
+
+  /* Reduce cyber-grid pattern density for performance */
+  .cyber-grid {
+    background-size: 80px 80px, 80px 80px, 100% 100% !important;
+  }
+
+  /* Status dot badges: slightly larger text */
+  .text-\[10px\].font-mono {
+    font-size: 11px !important;
+  }
+
+  /* Smooth scrolling for the page */
+  html {
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Improve tap highlight for interactive elements */
+  button, a, [role="button"], [role="option"], [role="combobox"] {
+    -webkit-tap-highlight-color: rgba(0, 255, 255, 0.1);
+  }
+
+  /* ----------------------------------------------------------
+     Section 13: Extra-Small Screens (< 480px)
+     ---------------------------------------------------------- */
+  @media (max-width: 480px) {
+
+    /* Stack 2-column sub-grids */
+    .grid.grid-cols-2 {
+      grid-template-columns: 1fr !important;
+      gap: 0.5rem !important;
+    }
+
+    /* Header: hide GitHub star link */
+    header.h-14 a[href*="github"] {
+      display: none !important;
+    }
+
+    /* Header title: smaller */
+    header .text-lg {
+      font-size: 1rem !important;
+    }
+
+    /* Footer social links: tighter */
+    footer .gap-3:last-child {
+      gap: 0.25rem !important;
+    }
+
+    footer a.w-11.h-11 {
+      width: 2.25rem !important;
+      height: 2.25rem !important;
+    }
+
+    /* Content padding: even tighter */
+    .cyber-grid > div.flex-1.p-4,
+    .cyber-grid > div.flex-1.flex.flex-col {
+      padding: 0.5rem !important;
+    }
+
+    /* Main padding on all panels */
+    .p-4 {
+      padding: 0.625rem !important;
+    }
+
+    .p-6 {
+      padding: 0.75rem !important;
+    }
+
+    .px-6 {
+      padding-left: 0.75rem !important;
+      padding-right: 0.75rem !important;
+    }
+
+    .px-8 {
+      padding-left: 1rem !important;
+      padding-right: 1rem !important;
+    }
+  }
+}
