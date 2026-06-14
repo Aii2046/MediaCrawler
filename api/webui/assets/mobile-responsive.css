@@ -1,0 +1,504 @@
+/**
+ * MediaCrawler WebUI - Mobile Responsive Overrides
+ *
+ * This stylesheet provides responsive layout overrides for mobile and tablet devices.
+ * All !important declarations are scoped to @media queries and do NOT affect desktop.
+ *
+ * Breakpoints:
+ *   - Phone:       max-width 767px
+ *   - Tablet:      768px – 1024px
+ *   - Desktop:     > 1024px (no overrides)
+ */
+
+/* ═══════════════════════════════════════════════════════════
+   PHONE (max-width: 767px)
+   ═══════════════════════════════════════════════════════════ */
+
+@media (max-width: 767px) {
+
+  /* ── 1. Root Overflow Fix (CRITICAL) ────────────────────
+     The root div has h-screen + overflow-hidden which prevents
+     page scrolling on small screens. Release that constraint. */
+
+  .flex.flex-col.h-screen.cyber-grid.overflow-hidden.relative {
+    height: auto !important;
+    min-height: 100vh !important;
+    min-height: 100dvh !important;
+    overflow: auto !important;
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Main content container: release from flex-1 overflow trap */
+  .flex-1.flex.flex-col.gap-4.p-4.overflow-hidden.min-h-0 {
+    overflow: visible !important;
+    min-height: auto !important;
+    flex: none !important;
+  }
+
+
+  /* ── 2. Header Compact ─────────────────────────────────
+     Reduce header from 56px to ~44px */
+
+  header.h-14.flex-shrink-0.glass-panel.border-b {
+    height: auto !important;
+    min-height: 44px !important;
+    padding: 6px 12px !important;
+  }
+
+  header.h-14.flex-shrink-0.glass-panel.border-b .h-full.px-4 {
+    padding-left: 8px !important;
+    padding-right: 8px !important;
+  }
+
+  /* Header: hide non-essential elements to save space */
+  header.h-14.flex-shrink-0.glass-panel.border-b .hidden.lg\:flex {
+    display: none !important;
+  }
+
+  /* Shrink the branding font */
+  header.h-14 .font-mono.font-bold.text-sm {
+    font-size: 12px !important;
+  }
+
+
+  /* ── 3. Footer Collapse (HIGH IMPACT) ──────────────────
+     Reduce footer from 96px to ~40px */
+
+  footer.h-24.flex-shrink-0.glass-panel.border-t {
+    height: auto !important;
+    min-height: 36px !important;
+    padding: 6px 12px !important;
+  }
+
+  footer.h-24.flex-shrink-0.glass-panel.border-t > .h-full {
+    height: auto !important;
+    gap: 8px !important;
+    padding: 0 !important;
+    flex-wrap: wrap !important;
+    justify-content: center !important;
+  }
+
+  /* Shrink the author avatar */
+  footer.h-24 .w-14.h-14 {
+    width: 28px !important;
+    height: 28px !important;
+  }
+
+  /* Shrink author text */
+  footer.h-24 .text-lg {
+    font-size: 12px !important;
+    line-height: 1.2 !important;
+  }
+
+  footer.h-24 .text-sm {
+    font-size: 10px !important;
+    line-height: 1.2 !important;
+  }
+
+  /* Hide author description on phone */
+  footer.h-24 .hidden.sm\:inline {
+    display: none !important;
+  }
+
+  /* Shrink social link buttons */
+  footer.h-24 .w-11.h-11 {
+    width: 32px !important;
+    height: 32px !important;
+  }
+
+  footer.h-24 .w-11.h-11 img {
+    width: 16px !important;
+    height: 16px !important;
+  }
+
+
+  /* ── 4. Spacing Reduction ──────────────────────────────
+     Tighten padding and gaps to reclaim space */
+
+  .flex-1.flex.flex-col.gap-4.p-4.overflow-hidden.min-h-0 {
+    padding: 8px !important;
+    gap: 8px !important;
+  }
+
+  .grid.grid-cols-1.md\:grid-cols-3.gap-4 {
+    gap: 8px !important;
+  }
+
+
+  /* ── 5. Card Internals ─────────────────────────────────
+     Tighten card headers and bodies */
+
+  /* Card header */
+  .px-4.py-3.border-b.border-cyber-border-subtle\/50 {
+    padding: 8px 12px !important;
+    gap: 8px !important;
+  }
+
+  /* Card header icon container */
+  .px-4.py-3 .h-8.w-8 {
+    width: 28px !important;
+    height: 28px !important;
+  }
+
+  /* Card header title */
+  .px-4.py-3 .text-xs.font-mono.font-semibold {
+    font-size: 11px !important;
+  }
+
+  /* Card header description */
+  .px-4.py-3 .text-\[10px\] {
+    font-size: 10px !important;
+  }
+
+  /* Card body */
+  .p-4.space-y-4 {
+    padding: 10px !important;
+  }
+
+
+  /* ── 6. Touch Targets: 36px → 44px (Apple HIG) ────────
+     Select triggers and input fields need larger hit areas */
+
+  /* Radix Select triggers (have items-center AND justify-between) */
+  .flex.h-9.w-full.items-center.justify-between {
+    height: 44px !important;
+    min-height: 44px !important;
+  }
+
+  /* Input fields (have rounded-md but NOT items-center) */
+  .flex.h-9.w-full.rounded-md:not(.items-center) {
+    height: 44px !important;
+    min-height: 44px !important;
+  }
+
+  /* Standalone number inputs */
+  input[type="number"].h-9 {
+    height: 44px !important;
+    min-height: 44px !important;
+  }
+
+
+  /* ── 7. Textarea Sizing ────────────────────────────────
+     Increase minimum heights for better usability */
+
+  .min-h-\[60px\] {
+    min-height: 80px !important;
+  }
+
+  .min-h-\[80px\] {
+    min-height: 100px !important;
+  }
+
+
+  /* ── 8. Font Size Floor ────────────────────────────────
+     Ensure minimum readability on small screens */
+
+  .text-\[10px\] {
+    font-size: 11px !important;
+  }
+
+  .text-\[11px\] {
+    font-size: 12px !important;
+  }
+
+
+  /* ── 9. Warning / Info Badges ──────────────────────────
+     Better padding and readability */
+
+  .rounded-lg.border.border-cyber-neon-orange\/30.bg-cyber-neon-orange\/5 {
+    font-size: 11px !important;
+    padding: 8px !important;
+  }
+
+
+  /* ── 10. Toggle Switches ───────────────────────────────
+     Ensure toggle rows have adequate touch area */
+
+  .flex.items-center.gap-3.rounded-lg.border.border-cyber-border-subtle {
+    padding: 10px !important;
+    min-height: 44px !important;
+  }
+
+
+  /* ── 11. Action Button ─────────────────────────────────
+     Make the start/stop button more prominent */
+
+  .w-full.h-12.bg-cyber-neon-cyan,
+  .w-full.h-12.bg-cyber-neon-pink {
+    height: 52px !important;
+    font-size: 14px !important;
+    border-radius: 10px !important;
+    margin-top: 4px !important;
+  }
+
+
+  /* ── 12. Terminal Section ──────────────────────────────
+     Guarantee minimum height so it remains usable */
+
+  main.flex-1.flex.flex-col.overflow-hidden.min-h-0.relative.z-10 {
+    min-height: 280px !important;
+    flex: none !important;
+  }
+
+  /* Terminal header bar */
+  .flex.items-center.justify-between.px-4.py-2\.5.bg-\[\#161b22\] {
+    padding: 6px 10px !important;
+  }
+
+  /* Terminal log output area */
+  .flex-1.overflow-auto.p-4.font-mono.text-sm.terminal-scroll.bg-\[\#0d1117\] {
+    padding: 8px !important;
+    min-height: 200px !important;
+    font-size: 12px !important;
+  }
+
+  /* Terminal footer */
+  .px-4.py-2.border-t.border-\[\#30363d\].bg-\[\#161b22\] {
+    padding: 6px 10px !important;
+  }
+
+
+  /* ── 13. Keyword Tag Input ─────────────────────────────
+     Improve tag chip sizing */
+
+  .flex.flex-wrap.gap-1\.5 {
+    gap: 6px !important;
+  }
+
+  /* Keyword tag chips */
+  .flex.items-center.gap-1.rounded-md {
+    padding: 4px 8px !important;
+    min-height: 28px !important;
+    font-size: 12px !important;
+  }
+
+
+  /* ── 14. Data Explorer Grid ────────────────────────────
+     Force single column on phone */
+
+  .grid.grid-cols-1.md\:grid-cols-2,
+  .grid.grid-cols-1.md\:grid-cols-3,
+  .grid.grid-cols-2 {
+    grid-template-columns: 1fr !important;
+  }
+
+
+  /* ── 15. Dialog / Modal Overrides ──────────────────────
+     Make dialogs full-screen on phone */
+
+  .max-w-5xl.max-h-\[85vh\],
+  .max-w-2xl.max-h-\[85vh\],
+  .max-w-lg.max-h-\[85vh\] {
+    max-width: calc(100vw - 16px) !important;
+    max-height: calc(100dvh - 32px) !important;
+    width: calc(100vw - 16px) !important;
+    margin: 16px !important;
+    border-radius: 12px !important;
+  }
+
+  /* Dialog backdrop */
+  .fixed.inset-0.bg-black\/80,
+  .fixed.inset-0.bg-black\/95 {
+    padding: 0 !important;
+  }
+
+
+  /* ── 16. Disclaimer / License Dialog ───────────────────
+     Better mobile dialog sizing */
+
+  .max-w-6xl {
+    max-width: 100% !important;
+  }
+
+
+  /* ── 17. Global Touch Refinements ────────────────────── */
+
+  button,
+  [role="button"],
+  a {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    overflow-x: hidden !important;
+  }
+
+  /* Disable hover scale effects on touch (they cause layout shift) */
+  .hover\:scale-110:hover {
+    transform: none !important;
+  }
+
+  /* Dropdown content max-width on phone */
+  .min-w-\[8rem\] {
+    min-width: 6rem !important;
+  }
+}
+
+
+/* ═══════════════════════════════════════════════════════════
+   TABLET (768px – 1024px)
+   ═══════════════════════════════════════════════════════════ */
+
+@media (min-width: 768px) and (max-width: 1024px) {
+
+  /* Touch targets: slightly larger for tablet */
+  .flex.h-9.w-full.items-center.justify-between {
+    height: 44px !important;
+    min-height: 44px !important;
+  }
+
+  .flex.h-9.w-full.rounded-md:not(.items-center) {
+    height: 44px !important;
+    min-height: 44px !important;
+  }
+
+  input[type="number"].h-9 {
+    height: 44px !important;
+    min-height: 44px !important;
+  }
+
+  /* Font size readability */
+  .text-\[10px\] {
+    font-size: 11px !important;
+  }
+
+  .text-\[11px\] {
+    font-size: 12px !important;
+  }
+
+  /* Footer: slightly more compact */
+  footer.h-24.flex-shrink-0.glass-panel.border-t {
+    height: auto !important;
+    min-height: 64px !important;
+    padding: 8px 16px !important;
+  }
+
+  /* Card body padding */
+  .p-4.space-y-4 {
+    padding: 12px !important;
+  }
+
+  /* Toggle rows */
+  .flex.items-center.gap-3.rounded-lg.border.border-cyber-border-subtle {
+    padding: 10px !important;
+    min-height: 44px !important;
+  }
+
+  /* Disable hover scale on touch */
+  .hover\:scale-110:hover {
+    transform: none !important;
+  }
+
+  button,
+  [role="button"] {
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+
+/* ═══════════════════════════════════════════════════════════
+   SAFE AREA INSETS (iPhone Notch & Home Indicator)
+   ═══════════════════════════════════════════════════════════ */
+
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  @media (max-width: 767px) {
+    /* Header: add safe area top inset */
+    header.h-14.flex-shrink-0.glass-panel.border-b {
+      padding-top: calc(6px + env(safe-area-inset-top)) !important;
+    }
+
+    /* Footer: add safe area bottom inset */
+    footer.h-24.flex-shrink-0.glass-panel.border-t {
+      padding-bottom: calc(6px + env(safe-area-inset-bottom)) !important;
+    }
+
+    /* Main content: safe area horizontal padding */
+    .flex-1.flex.flex-col.gap-4.p-4.overflow-hidden.min-h-0 {
+      padding-left: calc(8px + env(safe-area-inset-left)) !important;
+      padding-right: calc(8px + env(safe-area-inset-right)) !important;
+    }
+  }
+}
+
+
+/* ═══════════════════════════════════════════════════════════
+   VERY SMALL SCREENS (max-width: 375px, e.g. iPhone SE 1st gen)
+   ═══════════════════════════════════════════════════════════ */
+
+@media (max-width: 375px) {
+  /* Even tighter spacing */
+  .flex-1.flex.flex-col.gap-4.p-4.overflow-hidden.min-h-0 {
+    padding: 6px !important;
+    gap: 6px !important;
+  }
+
+  .grid.grid-cols-1.md\:grid-cols-3.gap-4 {
+    gap: 6px !important;
+  }
+
+  /* Shrink header further */
+  header.h-14.flex-shrink-0.glass-panel.border-b {
+    min-height: 40px !important;
+    padding: 4px 8px !important;
+  }
+
+  /* Card body: minimal padding */
+  .p-4.space-y-4 {
+    padding: 8px !important;
+  }
+
+  /* Footer: ultra compact */
+  footer.h-24.flex-shrink-0.glass-panel.border-t {
+    min-height: 32px !important;
+    padding: 4px 8px !important;
+  }
+
+  /* Social links: hide on very small screens */
+  footer.h-24 .flex.items-center.gap-3:last-child {
+    display: none !important;
+  }
+}
+
+
+/* ═══════════════════════════════════════════════════════════
+   LANDSCAPE PHONE (height <= 500px)
+   ═══════════════════════════════════════════════════════════ */
+
+@media (max-width: 767px) and (max-height: 500px) {
+  /* In landscape, give terminal more space */
+  main.flex-1.flex.flex-col.overflow-hidden.min-h-0.relative.z-10 {
+    min-height: 200px !important;
+  }
+
+  /* Hide footer in landscape mode */
+  footer.h-24.flex-shrink-0.glass-panel.border-t {
+    display: none !important;
+  }
+
+  /* Compact header */
+  header.h-14.flex-shrink-0.glass-panel.border-b {
+    min-height: 36px !important;
+    padding: 2px 8px !important;
+  }
+}
+
+
+/* ═══════════════════════════════════════════════════════════
+   PRINT STYLES
+   ═══════════════════════════════════════════════════════════ */
+
+@media print {
+  .flex.flex-col.h-screen.cyber-grid.overflow-hidden.relative {
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  footer.h-24.flex-shrink-0.glass-panel.border-t {
+    display: none !important;
+  }
+
+  .cyber-grid {
+    background-image: none !important;
+  }
+}
