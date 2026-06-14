@@ -26,17 +26,32 @@ import os
 import sys
 import subprocess
 import uvicorn
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
-from .routers import crawler_router, data_router, websocket_router
+import config
+from database.db_session import create_tables
+from .routers import crawler_router, data_router, websocket_router, query_router
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Startup/shutdown lifecycle: ensure DB tables exist for query API."""
+    if config.SAVE_DATA_OPTION in ("sqlite", "db", "mysql", "postgres"):
+        try:
+            await create_tables(config.SAVE_DATA_OPTION)
+        except Exception:
+            pass  # Tables may already exist or DB may not be reachable yet
+    yield
 
 app = FastAPI(
     title="MediaCrawler WebUI API",
     description="API for controlling MediaCrawler from WebUI",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan,
 )
 
 # Get webui static files directory
@@ -60,6 +75,7 @@ app.add_middleware(
 app.include_router(crawler_router, prefix="/api")
 app.include_router(data_router, prefix="/api")
 app.include_router(websocket_router, prefix="/api")
+app.include_router(query_router, prefix="/api")
 
 
 @app.get("/")

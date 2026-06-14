@@ -25,6 +25,12 @@ from .crawler import (
     CrawlerStatusResponse,
     LogEntry,
 )
+from .query import (
+    ContentQueryRequest,
+    ContentQueryResponse,
+    CommentQueryResponse,
+    QueryStatsResponse,
+)
 
 __all__ = [
     "PlatformEnum",
@@ -34,4 +40,8 @@ __all__ = [
     "CrawlerStartRequest",
     "CrawlerStatusResponse",
     "LogEntry",
+    "ContentQueryRequest",
+    "ContentQueryResponse",
+    "CommentQueryResponse",
+    "QueryStatsResponse",
 ]
