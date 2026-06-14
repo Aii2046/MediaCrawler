@@ -20,6 +20,7 @@
 Pytest configuration and shared fixtures
 """
 
+import json
 import pytest
 import sys
 from pathlib import Path
@@ -96,3 +97,62 @@ def sample_xhs_creator():
         "interaction": 50000,
         "tag_list": '{"profession": "Designer", "interest": "Photography"}'
     }
+
+
+@pytest.fixture
+def sample_note_url():
+    """Sample XHS note URL for testing"""
+    return ("https://www.xiaohongshu.com/explore/test_note_123"
+            "?xsec_token=test_token_abc&xsec_source=pc_search")
+
+
+@pytest.fixture
+def sample_note_html():
+    """Realistic XHS HTML with __INITIAL_STATE__ for testing"""
+    state = {
+        "note": {
+            "noteDetailMap": {
+                "test_note_123": {
+                    "note": {
+                        "noteId": "test_note_123",
+                        "type": "normal",
+                        "title": "Test Note Title",
+                        "desc": "This is the note description",
+                        "time": 1700000000,
+                        "lastUpdateTime": 1700000000,
+                        "user": {
+                            "userId": "user_123",
+                            "nickname": "TestUser",
+                            "avatar": "https://example.com/avatar.jpg"
+                        },
+                        "interactInfo": {
+                            "likedCount": "100",
+                            "collectedCount": "50",
+                            "commentCount": "25",
+                            "shareCount": "10"
+                        },
+                        "imageList": [
+                            {
+                                "url": "https://sns-img-bd.xhscdn.com/img1",
+                                "urlDefault": "https://sns-img-bd.xhscdn.com/img1?w=1080"
+                            },
+                            {
+                                "url": "https://sns-img-bd.xhscdn.com/img2",
+                                "urlDefault": "https://sns-img-bd.xhscdn.com/img2?w=1080"
+                            }
+                        ],
+                        "tagList": [
+                            {"name": "travel", "type": "topic"},
+                            {"name": "photo", "type": "topic"}
+                        ],
+                        "ipLocation": "Shanghai",
+                        "video": {}
+                    }
+                }
+            }
+        }
+    }
+    state_json = json.dumps(state)
+    return (f'<html><head></head><body>'
+            f'<script>window.__INITIAL_STATE__={state_json}</script>'
+            f'</body></html>')

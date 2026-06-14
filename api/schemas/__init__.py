@@ -25,6 +25,14 @@ from .crawler import (
     CrawlerStatusResponse,
     LogEntry,
 )
+from .note import (
+    NoteFetchRequest,
+    NoteFetchResponse,
+    NoteUserInfo,
+    NoteInteractInfo,
+    NoteImageInfo,
+    NoteVideoInfo,
+)
 
 __all__ = [
     "PlatformEnum",
@@ -34,4 +42,10 @@ __all__ = [
     "CrawlerStartRequest",
     "CrawlerStatusResponse",
     "LogEntry",
+    "NoteFetchRequest",
+    "NoteFetchResponse",
+    "NoteUserInfo",
+    "NoteInteractInfo",
+    "NoteImageInfo",
+    "NoteVideoInfo",
 ]

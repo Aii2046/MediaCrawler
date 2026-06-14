@@ -1,0 +1,664 @@
+<!doctype html>
+<html lang="zh-CN" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <link rel="icon" type="image/svg+xml" href="/vite.svg">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MediaCrawler - Note Fetcher</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: 10 10 15;
+            --bg-secondary: 13 17 23;
+            --bg-tertiary: 22 27 34;
+            --bg-panel: 28 33 40;
+            --neon-cyan: 0 255 255;
+            --neon-cyan-dim: 37 177 191;
+            --neon-pink: 255 0 128;
+            --neon-green: 0 255 65;
+            --neon-purple: 168 85 247;
+            --text-primary: 241 245 249;
+            --text-secondary: 148 163 184;
+            --text-muted: 100 116 139;
+            --border-default: 51 65 85;
+            --border-glow: 0 255 255;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Inter', system-ui, sans-serif;
+            background: rgb(var(--bg-primary));
+            color: rgb(var(--text-primary));
+            min-height: 100vh;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 960px;
+            margin: 0 auto;
+            padding: 2rem 1.5rem;
+        }
+
+        /* Header */
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 2rem;
+        }
+        .header h1 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, rgb(var(--neon-cyan)), rgb(var(--neon-purple)));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .back-link {
+            color: rgb(var(--text-secondary));
+            text-decoration: none;
+            font-size: 0.875rem;
+            transition: color 0.2s;
+        }
+        .back-link:hover { color: rgb(var(--neon-cyan)); }
+
+        /* Glass panel */
+        .glass-panel {
+            background: rgba(var(--bg-panel), 0.6);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(var(--border-default), 0.5);
+            border-radius: 12px;
+            padding: 1.5rem;
+            position: relative;
+            overflow: hidden;
+        }
+        .glass-panel::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgb(var(--neon-cyan) / 0.5), transparent);
+        }
+
+        /* Input section */
+        .input-panel { margin-bottom: 1.5rem; }
+        .input-row {
+            display: flex;
+            gap: 0.75rem;
+            margin-bottom: 0.75rem;
+        }
+        .url-input {
+            flex: 1;
+            background: rgb(var(--bg-secondary));
+            border: 1px solid rgb(var(--border-default));
+            border-radius: 8px;
+            padding: 0.75rem 1rem;
+            color: rgb(var(--text-primary));
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.875rem;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        .url-input:focus {
+            border-color: rgb(var(--neon-cyan));
+            box-shadow: 0 0 0 2px rgb(var(--neon-cyan) / 0.15);
+        }
+        .url-input::placeholder { color: rgb(var(--text-muted)); }
+
+        .options-row {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+        .checkbox-label {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.875rem;
+            color: rgb(var(--text-secondary));
+            cursor: pointer;
+        }
+        .checkbox-label input[type="checkbox"] {
+            accent-color: rgb(var(--neon-cyan));
+            width: 16px;
+            height: 16px;
+        }
+
+        .fetch-btn {
+            background: linear-gradient(135deg, rgb(var(--neon-cyan-dim)), rgb(var(--neon-cyan)));
+            color: rgb(var(--bg-primary));
+            border: none;
+            border-radius: 8px;
+            padding: 0.75rem 1.5rem;
+            font-weight: 600;
+            font-size: 0.875rem;
+            cursor: pointer;
+            transition: opacity 0.2s, transform 0.1s;
+            white-space: nowrap;
+        }
+        .fetch-btn:hover { opacity: 0.9; }
+        .fetch-btn:active { transform: scale(0.98); }
+        .fetch-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        /* Loading */
+        .loading {
+            text-align: center;
+            padding: 3rem;
+            color: rgb(var(--text-secondary));
+        }
+        .loading-spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid rgb(var(--border-default));
+            border-top-color: rgb(var(--neon-cyan));
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin: 0 auto 1rem;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* Error */
+        .error-panel {
+            background: rgba(239 68 68, 0.1);
+            border: 1px solid rgba(239 68 68, 0.3);
+            border-radius: 12px;
+            padding: 1rem 1.5rem;
+            color: #fca5a5;
+            margin-bottom: 1.5rem;
+        }
+        .error-panel strong { color: #fecaca; }
+
+        /* Results */
+        .results { display: flex; flex-direction: column; gap: 1.25rem; }
+
+        .note-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 1rem;
+        }
+        .note-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            line-height: 1.4;
+        }
+        .type-badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            flex-shrink: 0;
+        }
+        .type-badge.normal {
+            background: rgba(var(--neon-green), 0.15);
+            color: rgb(var(--neon-green));
+            border: 1px solid rgba(var(--neon-green), 0.3);
+        }
+        .type-badge.video {
+            background: rgba(var(--neon-pink), 0.15);
+            color: rgb(var(--neon-pink));
+            border: 1px solid rgba(var(--neon-pink), 0.3);
+        }
+
+        .note-desc {
+            color: rgb(var(--text-secondary));
+            font-size: 0.9rem;
+            white-space: pre-wrap;
+            margin-top: 0.75rem;
+        }
+
+        .note-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1rem;
+            font-size: 0.8rem;
+            color: rgb(var(--text-muted));
+            margin-top: 0.75rem;
+        }
+
+        .tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-top: 0.75rem;
+        }
+        .tag {
+            background: rgba(var(--neon-purple), 0.12);
+            color: rgb(var(--neon-purple));
+            border: 1px solid rgba(var(--neon-purple), 0.25);
+            padding: 0.15rem 0.6rem;
+            border-radius: 999px;
+            font-size: 0.75rem;
+        }
+
+        /* User card */
+        .user-card {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+        .user-avatar {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            border: 2px solid rgb(var(--border-default));
+            object-fit: cover;
+        }
+        .user-nickname { font-weight: 600; font-size: 0.95rem; }
+        .user-id { font-size: 0.8rem; color: rgb(var(--text-muted)); font-family: 'JetBrains Mono', monospace; }
+
+        /* Stats */
+        .stats-row {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 0.75rem;
+        }
+        .stat-card {
+            background: rgba(var(--bg-tertiary), 0.6);
+            border: 1px solid rgba(var(--border-default), 0.4);
+            border-radius: 10px;
+            padding: 1rem;
+            text-align: center;
+        }
+        .stat-value {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: rgb(var(--neon-cyan));
+        }
+        .stat-label {
+            font-size: 0.75rem;
+            color: rgb(var(--text-muted));
+            margin-top: 0.25rem;
+        }
+
+        /* Media sections */
+        .section-title {
+            font-size: 1rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .section-title .count {
+            background: rgba(var(--neon-cyan), 0.15);
+            color: rgb(var(--neon-cyan));
+            padding: 0.1rem 0.5rem;
+            border-radius: 999px;
+            font-size: 0.75rem;
+        }
+
+        .image-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            gap: 0.75rem;
+        }
+        .image-thumb {
+            aspect-ratio: 1;
+            border-radius: 8px;
+            overflow: hidden;
+            cursor: pointer;
+            border: 1px solid rgb(var(--border-default));
+            transition: border-color 0.2s, transform 0.15s;
+            position: relative;
+        }
+        .image-thumb:hover {
+            border-color: rgb(var(--neon-cyan));
+            transform: scale(1.02);
+        }
+        .image-thumb img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .image-thumb .img-idx {
+            position: absolute;
+            bottom: 4px;
+            right: 6px;
+            background: rgba(0,0,0,0.6);
+            color: #fff;
+            font-size: 0.7rem;
+            padding: 1px 6px;
+            border-radius: 4px;
+        }
+
+        .video-container {
+            border-radius: 8px;
+            overflow: hidden;
+            border: 1px solid rgb(var(--border-default));
+        }
+        .video-container video {
+            width: 100%;
+            max-height: 480px;
+            display: block;
+            background: #000;
+        }
+
+        /* Lightbox */
+        .lightbox {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.9);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            cursor: zoom-out;
+        }
+        .lightbox img {
+            max-width: 95vw;
+            max-height: 95vh;
+            object-fit: contain;
+            border-radius: 4px;
+        }
+        .lightbox-close {
+            position: absolute;
+            top: 1rem;
+            right: 1.5rem;
+            color: #fff;
+            font-size: 2rem;
+            cursor: pointer;
+            background: none;
+            border: none;
+            opacity: 0.7;
+        }
+        .lightbox-close:hover { opacity: 1; }
+
+        .hidden { display: none !important; }
+
+        /* Responsive */
+        @media (max-width: 640px) {
+            .input-row { flex-direction: column; }
+            .stats-row { grid-template-columns: repeat(2, 1fr); }
+            .image-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1>Note Content Fetcher</h1>
+            <a href="/" class="back-link">Back to Dashboard</a>
+        </header>
+
+        <section class="input-panel glass-panel">
+            <div class="input-row">
+                <input type="url" id="noteUrl" class="url-input"
+                       placeholder="Paste XHS note URL, e.g. https://www.xiaohongshu.com/explore/...?xsec_token=...&xsec_source=...">
+                <button id="fetchBtn" class="fetch-btn" onclick="fetchNote()">Fetch</button>
+            </div>
+            <div class="options-row">
+                <label class="checkbox-label">
+                    <input type="checkbox" id="downloadMedia" checked>
+                    Download media files (images &amp; videos)
+                </label>
+            </div>
+        </section>
+
+        <div id="loading" class="loading hidden">
+            <div class="loading-spinner"></div>
+            <div>Fetching note content...</div>
+        </div>
+
+        <div id="error" class="error-panel hidden"></div>
+
+        <div id="results" class="results hidden">
+            <!-- Note info -->
+            <div class="glass-panel">
+                <div class="note-header">
+                    <h2 id="noteTitle" class="note-title"></h2>
+                    <span id="typeBadge" class="type-badge"></span>
+                </div>
+                <p id="noteDesc" class="note-desc"></p>
+                <div id="noteMeta" class="note-meta"></div>
+                <div id="noteTags" class="tags"></div>
+            </div>
+
+            <!-- User info -->
+            <div id="userSection" class="glass-panel hidden">
+                <div class="user-card">
+                    <img id="userAvatar" class="user-avatar" src="" alt="avatar">
+                    <div>
+                        <div id="userNickname" class="user-nickname"></div>
+                        <div id="userId" class="user-id"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Stats -->
+            <div id="statsSection" class="stats-row hidden">
+                <div class="stat-card">
+                    <div id="likeCount" class="stat-value">0</div>
+                    <div class="stat-label">Likes</div>
+                </div>
+                <div class="stat-card">
+                    <div id="collectCount" class="stat-value">0</div>
+                    <div class="stat-label">Collects</div>
+                </div>
+                <div class="stat-card">
+                    <div id="commentCount" class="stat-value">0</div>
+                    <div class="stat-label">Comments</div>
+                </div>
+                <div class="stat-card">
+                    <div id="shareCount" class="stat-value">0</div>
+                    <div class="stat-label">Shares</div>
+                </div>
+            </div>
+
+            <!-- Images -->
+            <div id="imageSection" class="glass-panel hidden">
+                <div class="section-title">
+                    Images <span id="imageCount" class="count"></span>
+                </div>
+                <div id="imageGrid" class="image-grid"></div>
+            </div>
+
+            <!-- Videos -->
+            <div id="videoSection" class="glass-panel hidden">
+                <div class="section-title">
+                    Videos <span id="videoCount" class="count"></span>
+                </div>
+                <div id="videoList"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Lightbox -->
+    <div id="lightbox" class="lightbox hidden" onclick="closeLightbox()">
+        <button class="lightbox-close" onclick="closeLightbox()">&times;</button>
+        <img id="lightboxImg" src="" alt="full image">
+    </div>
+
+    <script>
+        const $ = (sel) => document.querySelector(sel);
+        const API_BASE = '/api/note';
+
+        function setLoading(on) {
+            $('#loading').classList.toggle('hidden', !on);
+            $('#fetchBtn').disabled = on;
+            if (on) {
+                $('#results').classList.add('hidden');
+                $('#error').classList.add('hidden');
+            }
+        }
+
+        function showError(msg) {
+            $('#error').innerHTML = `<strong>Error:</strong> ${escapeHtml(msg)}`;
+            $('#error').classList.remove('hidden');
+        }
+
+        function escapeHtml(str) {
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+
+        function formatTime(ts) {
+            if (!ts) return '';
+            const d = new Date(ts * 1000);
+            return d.toLocaleString('zh-CN');
+        }
+
+        async function fetchNote() {
+            const url = $('#noteUrl').value.trim();
+            if (!url) {
+                showError('Please enter a valid XHS note URL');
+                return;
+            }
+
+            const downloadMedia = $('#downloadMedia').checked;
+            setLoading(true);
+
+            try {
+                const resp = await fetch(`${API_BASE}/fetch`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url, download_media: downloadMedia }),
+                });
+
+                const data = await resp.json();
+                setLoading(false);
+
+                if (!data.success) {
+                    showError(data.error || 'Unknown error occurred');
+                    return;
+                }
+
+                renderResults(data);
+            } catch (err) {
+                setLoading(false);
+                showError(`Network error: ${err.message}`);
+            }
+        }
+
+        function renderResults(data) {
+            // Title & type
+            $('#noteTitle').textContent = data.title || '(No title)';
+            const badge = $('#typeBadge');
+            badge.textContent = data.type || 'unknown';
+            badge.className = `type-badge ${data.type === 'video' ? 'video' : 'normal'}`;
+
+            // Description
+            $('#noteDesc').textContent = data.desc || '';
+
+            // Meta
+            const metaParts = [];
+            if (data.note_id) metaParts.push(`ID: ${data.note_id}`);
+            if (data.time) metaParts.push(`Published: ${formatTime(data.time)}`);
+            if (data.ip_location) metaParts.push(`Location: ${data.ip_location}`);
+            $('#noteMeta').textContent = metaParts.join(' | ');
+
+            // Tags
+            const tagsEl = $('#noteTags');
+            tagsEl.innerHTML = '';
+            (data.tag_list || []).forEach(t => {
+                if (t) {
+                    const span = document.createElement('span');
+                    span.className = 'tag';
+                    span.textContent = '#' + t;
+                    tagsEl.appendChild(span);
+                }
+            });
+
+            // User
+            const userSection = $('#userSection');
+            if (data.user && (data.user.nickname || data.user.user_id)) {
+                $('#userNickname').textContent = data.user.nickname || '';
+                $('#userId').textContent = data.user.user_id || '';
+                if (data.user.avatar) {
+                    $('#userAvatar').src = data.user.avatar;
+                    $('#userAvatar').classList.remove('hidden');
+                } else {
+                    $('#userAvatar').classList.add('hidden');
+                }
+                userSection.classList.remove('hidden');
+            } else {
+                userSection.classList.add('hidden');
+            }
+
+            // Stats
+            const statsSection = $('#statsSection');
+            if (data.interact_info) {
+                $('#likeCount').textContent = data.interact_info.liked_count || '0';
+                $('#collectCount').textContent = data.interact_info.collected_count || '0';
+                $('#commentCount').textContent = data.interact_info.comment_count || '0';
+                $('#shareCount').textContent = data.interact_info.share_count || '0';
+                statsSection.classList.remove('hidden');
+            } else {
+                statsSection.classList.add('hidden');
+            }
+
+            // Images
+            const imageSection = $('#imageSection');
+            const imageGrid = $('#imageGrid');
+            imageGrid.innerHTML = '';
+            if (data.images && data.images.length > 0) {
+                $('#imageCount').textContent = data.images.length;
+                data.images.forEach(img => {
+                    const src = img.download_url || img.url_default || img.url;
+                    if (!src) return;
+                    const div = document.createElement('div');
+                    div.className = 'image-thumb';
+                    div.onclick = () => openLightbox(src);
+                    div.innerHTML = `<img src="${escapeHtml(src)}" alt="image ${img.index}" loading="lazy"><span class="img-idx">${img.index + 1}</span>`;
+                    imageGrid.appendChild(div);
+                });
+                imageSection.classList.remove('hidden');
+            } else {
+                imageSection.classList.add('hidden');
+            }
+
+            // Videos
+            const videoSection = $('#videoSection');
+            const videoList = $('#videoList');
+            videoList.innerHTML = '';
+            if (data.videos && data.videos.length > 0) {
+                $('#videoCount').textContent = data.videos.length;
+                data.videos.forEach(vid => {
+                    const src = vid.download_url || vid.url;
+                    if (!src) return;
+                    const div = document.createElement('div');
+                    div.className = 'video-container';
+                    div.style.marginBottom = '0.75rem';
+                    div.innerHTML = `<video controls preload="metadata"><source src="${escapeHtml(src)}" type="video/mp4">Your browser does not support video.</video>`;
+                    videoList.appendChild(div);
+                });
+                videoSection.classList.remove('hidden');
+            } else {
+                videoSection.classList.add('hidden');
+            }
+
+            $('#results').classList.remove('hidden');
+        }
+
+        function openLightbox(src) {
+            $('#lightboxImg').src = src;
+            $('#lightbox').classList.remove('hidden');
+        }
+
+        function closeLightbox() {
+            $('#lightbox').classList.add('hidden');
+            $('#lightboxImg').src = '';
+        }
+
+        // Enter key to submit
+        $('#noteUrl').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') fetchNote();
+        });
+
+        // Escape to close lightbox
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') closeLightbox();
+        });
+    </script>
+</body>
+</html>
