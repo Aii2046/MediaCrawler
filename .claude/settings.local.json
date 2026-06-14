@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(uv run:*)",
+      "Bash(curl -s \"http://localhost:8080/api/query/dy/comments?page=1&page_size=5\")",
+      "Bash(curl -s \"http://localhost:8080/api/query/bili/creators?keyword=test\")",
+      "Bash(curl -s \"http://localhost:8080/api/query/xhs/content?keyword=python&min_likes=10&time_start=1700000000&sort_by=liked_count\")",
+      "Bash(curl -s \"http://localhost:8080/api/query/invalid/content\")",
+      "Bash(curl -s \"http://localhost:8080/api/query/ks/creators\")"
+    ]
+  }
+}

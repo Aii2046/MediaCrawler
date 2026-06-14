@@ -25,6 +25,7 @@ from .crawler import (
     CrawlerStatusResponse,
     LogEntry,
 )
+from .query import PaginatedResponse, QueryRequest
 
 __all__ = [
     "PlatformEnum",
@@ -34,4 +35,6 @@ __all__ = [
     "CrawlerStartRequest",
     "CrawlerStatusResponse",
     "LogEntry",
+    "QueryRequest",
+    "PaginatedResponse",
 ]
