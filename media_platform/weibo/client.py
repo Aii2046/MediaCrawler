@@ -26,27 +26,23 @@ import asyncio
 import copy
 import json
 import re
-from typing import TYPE_CHECKING, Callable, Dict, List, Optional, Union
+from typing import Callable, Dict, List, Optional, Union
 from urllib.parse import parse_qs, unquote, urlencode
 
-import httpx
 from httpx import Response
 from playwright.async_api import BrowserContext, Page
 from tools.httpx_util import make_async_client
 from tenacity import retry, stop_after_attempt, wait_fixed
 
 import config
-from proxy.proxy_mixin import ProxyRefreshMixin
+from base.base_client import BasePlatformClient
 from tools import utils
-
-if TYPE_CHECKING:
-    from proxy.proxy_ip_pool import ProxyIpPool
 
 from .exception import DataFetchError
 from .field import SearchType
 
 
-class WeiboClient(ProxyRefreshMixin):
+class WeiboClient(BasePlatformClient):
 
     def __init__(
         self,
@@ -56,18 +52,36 @@ class WeiboClient(ProxyRefreshMixin):
         headers: Dict[str, str],
         playwright_page: Page,
         cookie_dict: Dict[str, str],
-        proxy_ip_pool: Optional["ProxyIpPool"] = None,
+        proxy_ip_pool=None,
     ):
-        self.proxy = proxy
-        self.timeout = timeout
-        self.headers = headers
+        super().__init__(
+            timeout, proxy,
+            headers=headers,
+            playwright_page=playwright_page,
+            cookie_dict=cookie_dict,
+            proxy_ip_pool=proxy_ip_pool,
+        )
         self._host = "https://m.weibo.cn"
         self.cookie_urls = [self._host]
-        self.playwright_page = playwright_page
-        self.cookie_dict = cookie_dict
         self._image_agent_host = "https://i1.wp.com/"
-        # Initialize proxy pool (from ProxyRefreshMixin)
-        self.init_proxy_pool(proxy_ip_pool)
+
+    def _parse_response(self, response) -> Union[Response, Dict]:
+        try:
+            data: Dict = response.json()
+        except json.decoder.JSONDecodeError:
+            # issue: #771 Search API returns error 432, retry multiple times + update h5 cookies
+            utils.logger.error(f"[WeiboClient.request] request err code: {response.status_code} res:{response.text}")
+            raise DataFetchError(f"get response code error: {response.status_code}")
+
+        ok_code = data.get("ok")
+        if ok_code == 0:  # response error
+            utils.logger.error(f"[WeiboClient.request] request err, res:{data}")
+            raise DataFetchError(data.get("msg", "response error"))
+        elif ok_code != 1:  # unknown error
+            utils.logger.error(f"[WeiboClient.request] request err, res:{data}")
+            raise DataFetchError(data.get("msg", "unknown error"))
+        else:  # response right
+            return data.get("data", {})
 
     @retry(stop=stop_after_attempt(5), wait=wait_fixed(3))
     async def request(self, method, url, **kwargs) -> Union[Response, Dict]:
@@ -82,24 +96,14 @@ class WeiboClient(ProxyRefreshMixin):
             return response
 
         try:
-            data: Dict = response.json()
-        except json.decoder.JSONDecodeError:
-            # issue: #771 Search API returns error 432, retry multiple times + update h5 cookies
-            utils.logger.error(f"[WeiboClient.request] request {method}:{url} err code: {response.status_code} res:{response.text}")
-            await self.playwright_page.goto(self._host)
-            await asyncio.sleep(2)
-            await self.update_cookies(browser_context=self.playwright_page.context)
-            raise DataFetchError(f"get response code error: {response.status_code}")
-
-        ok_code = data.get("ok")
-        if ok_code == 0:  # response error
-            utils.logger.error(f"[WeiboClient.request] request {method}:{url} err, res:{data}")
-            raise DataFetchError(data.get("msg", "response error"))
-        elif ok_code != 1:  # unknown error
-            utils.logger.error(f"[WeiboClient.request] request {method}:{url} err, res:{data}")
-            raise DataFetchError(data.get("msg", "unknown error"))
-        else:  # response right
-            return data.get("data", {})
+            return self._parse_response(response)
+        except DataFetchError as e:
+            # On JSON decode errors, try to refresh cookies before retry
+            if "response code error" in str(e):
+                await self.playwright_page.goto(self._host)
+                await asyncio.sleep(2)
+                await self.update_cookies(browser_context=self.playwright_page.context)
+            raise
 
     async def get(self, uri: str, params=None, headers=None, **kwargs) -> Union[Response, Dict]:
         final_uri = uri
@@ -130,24 +134,6 @@ class WeiboClient(ProxyRefreshMixin):
             utils.logger.error(f"[WeiboClient.pong] Pong weibo failed: {e}, and try to login again...")
             ping_flag = False
         return ping_flag
-
-    async def update_cookies(self, browser_context: BrowserContext, urls: Optional[List[str]] = None):
-        """
-        Update cookies from browser context
-        :param browser_context: Browser context
-        :param urls: Optional list of URLs to filter cookies (e.g., ["https://m.weibo.cn"])
-                     If provided, only cookies for these URLs will be retrieved
-        """
-        cookie_urls = urls or self.cookie_urls
-        cookie_str, cookie_dict = await utils.convert_browser_context_cookies(
-            browser_context,
-            urls=cookie_urls,
-        )
-        self.headers["Cookie"] = cookie_str
-        self.cookie_dict = cookie_dict
-        utils.logger.info(
-            f"[WeiboClient.update_cookies] Cookie updated successfully for {cookie_urls}, total: {len(cookie_dict)} cookies"
-        )
 
     async def get_note_by_keyword(
         self,
@@ -290,20 +276,8 @@ class WeiboClient(ProxyRefreshMixin):
                 image_url += sub_url[i] + "/"
         # Weibo image hosting has anti-hotlinking, so proxy access is needed
         # Since Weibo images are accessed through i1.wp.com, we need to concatenate the URL
-        final_uri = (f"{self._image_agent_host}"
-                     f"{image_url}")
-        async with make_async_client(proxy=self.proxy) as client:
-            try:
-                response = await client.request("GET", final_uri, timeout=self.timeout)
-                response.raise_for_status()
-                if not response.reason_phrase == "OK":
-                    utils.logger.error(f"[WeiboClient.get_note_image] request {final_uri} err, res:{response.text}")
-                    return None
-                else:
-                    return response.content
-            except httpx.HTTPError as exc:  # some wrong when call httpx.request method, such as connection error, client error, server error or response status code is not 2xx
-                utils.logger.error(f"[DouYinClient.get_aweme_media] {exc.__class__.__name__} for {exc.request.url} - {exc}")    # Keep original exception type name for developer debugging
-                return None
+        final_uri = f"{self._image_agent_host}{image_url}"
+        return await self.download_media(final_uri, follow_redirects=False)
 
     async def get_creator_container_info(self, creator_id: str) -> Dict:
         """

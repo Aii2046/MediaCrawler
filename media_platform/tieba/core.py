@@ -570,8 +570,7 @@ class TieBaCrawler(AbstractCrawler):
         # Build complete browser request headers, simulating real browser behavior
         tieba_client = BaiduTieBaClient(
             timeout=10,
-            ip_pool=ip_pool,
-            default_ip_proxy=httpx_proxy,
+            proxy=httpx_proxy,
             headers={
                 "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
                 "Accept-Language": "zh-CN,zh;q=0.9",
@@ -591,6 +590,8 @@ class TieBaCrawler(AbstractCrawler):
                 "sec-ch-ua-platform": '"macOS"',
             },
             playwright_page=self.context_page,  # Pass in playwright page object
+            cookie_dict=cookie_dict,
+            proxy_ip_pool=ip_pool,
         )
         return tieba_client
 

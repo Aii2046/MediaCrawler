@@ -20,31 +20,26 @@
 # -*- coding: utf-8 -*-
 import asyncio
 import json
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Union
+from typing import Any, Callable, Dict, List, Optional, Union
 from urllib.parse import urlencode
 
-import httpx
 from httpx import Response
 from playwright.async_api import BrowserContext, Page
 from tools.httpx_util import make_async_client
 from tenacity import retry, stop_after_attempt, wait_fixed
 
 import config
-from base.base_crawler import AbstractApiClient
+from base.base_client import BasePlatformClient
 from constant import zhihu as zhihu_constant
 from model.m_zhihu import ZhihuComment, ZhihuContent, ZhihuCreator
-from proxy.proxy_mixin import ProxyRefreshMixin
 from tools import utils
-
-if TYPE_CHECKING:
-    from proxy.proxy_ip_pool import ProxyIpPool
 
 from .exception import DataFetchError, ForbiddenError
 from .field import SearchSort, SearchTime, SearchType
 from .help import ZhihuExtractor, sign
 
 
-class ZhiHuClient(AbstractApiClient, ProxyRefreshMixin):
+class ZhiHuClient(BasePlatformClient):
 
     def __init__(
         self,
@@ -54,16 +49,19 @@ class ZhiHuClient(AbstractApiClient, ProxyRefreshMixin):
         headers: Dict[str, str],
         playwright_page: Page,
         cookie_dict: Dict[str, str],
-        proxy_ip_pool: Optional["ProxyIpPool"] = None,
+        proxy_ip_pool=None,
     ):
-        self.proxy = proxy
-        self.timeout = timeout
-        self.default_headers = headers
+        super().__init__(
+            timeout, proxy,
+            headers=headers,
+            playwright_page=playwright_page,
+            cookie_dict=cookie_dict,
+            proxy_ip_pool=proxy_ip_pool,
+        )
         self.cookie_urls = ["https://www.zhihu.com"]
-        self.cookie_dict = cookie_dict
+        # Zhihu uses lowercase "cookie" in headers, maintain alias for backward compatibility
+        self.default_headers = self.headers
         self._extractor = ZhihuExtractor()
-        # Initialize proxy pool (from ProxyRefreshMixin)
-        self.init_proxy_pool(proxy_ip_pool)
 
     async def _pre_headers(self, url: str) -> Dict:
         """
@@ -82,38 +80,15 @@ class ZhiHuClient(AbstractApiClient, ProxyRefreshMixin):
         headers['x-zse-96'] = sign_res["x-zse-96"]
         return headers
 
-    @retry(stop=stop_after_attempt(3), wait=wait_fixed(1))
-    async def request(self, method, url, **kwargs) -> Union[str, Any]:
-        """
-        Wrapper for httpx common request method with response handling
-        Args:
-            method: Request method
-            url: Request URL
-            **kwargs: Other request parameters such as headers, body, etc.
-
-        Returns:
-
-        """
-        # Check if proxy is expired before each request
-        await self._refresh_proxy_if_expired()
-
-        # return response.text
-        return_response = kwargs.pop('return_response', False)
-
-        async with make_async_client(proxy=self.proxy) as client:
-            response = await client.request(method, url, timeout=self.timeout, **kwargs)
-
+    def _parse_response(self, response) -> Any:
         if response.status_code != 200:
-            utils.logger.error(f"[ZhiHuClient.request] Requset Url: {url}, Request error: {response.text}")
+            utils.logger.error(f"[ZhiHuClient.request] Request error: {response.text}")
             if response.status_code == 403:
                 raise ForbiddenError(response.text)
             elif response.status_code == 404:  # Content without comments also returns 404
                 return {}
-
             raise DataFetchError(response.text)
 
-        if return_response:
-            return response.text
         try:
             data: Dict = response.json()
             if data.get("error"):
@@ -123,6 +98,32 @@ class ZhiHuClient(AbstractApiClient, ProxyRefreshMixin):
         except json.JSONDecodeError:
             utils.logger.error(f"[ZhiHuClient.request] Request error: {response.text}")
             raise DataFetchError(response.text)
+
+    @retry(stop=stop_after_attempt(3), wait=wait_fixed(1))
+    async def request(self, method, url, **kwargs) -> Union[str, Any]:
+        """
+        Zhihu request with retry and status code handling.
+        """
+        await self._refresh_proxy_if_expired()
+
+        return_response = kwargs.pop('return_response', False)
+
+        async with make_async_client(proxy=self.proxy) as client:
+            response = await client.request(method, url, timeout=self.timeout, **kwargs)
+
+        if return_response:
+            return response.text
+
+        return self._parse_response(response)
+
+    async def update_cookies(self, browser_context: BrowserContext, urls: Optional[List[str]] = None):
+        """Zhihu uses lowercase 'cookie' key in headers."""
+        cookie_str, cookie_dict = await utils.convert_browser_context_cookies(
+            browser_context,
+            urls=urls or self.cookie_urls,
+        )
+        self.default_headers["cookie"] = cookie_str
+        self.cookie_dict = cookie_dict
 
     async def get(self, uri: str, params=None, **kwargs) -> Union[Response, Dict, str]:
         """
@@ -160,22 +161,6 @@ class ZhiHuClient(AbstractApiClient, ProxyRefreshMixin):
             utils.logger.error(f"[ZhiHuClient.pong] Ping zhihu failed: {e}, and try to login again...")
             ping_flag = False
         return ping_flag
-
-    async def update_cookies(self, browser_context: BrowserContext, urls: Optional[list[str]] = None):
-        """
-        Update cookies method provided by API client, typically called after successful login
-        Args:
-            browser_context: Browser context object
-
-        Returns:
-
-        """
-        cookie_str, cookie_dict = await utils.convert_browser_context_cookies(
-            browser_context,
-            urls=urls or self.cookie_urls,
-        )
-        self.default_headers["cookie"] = cookie_str
-        self.cookie_dict = cookie_dict
 
     async def get_current_user_info(self) -> Dict:
         """

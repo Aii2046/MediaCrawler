@@ -21,40 +21,40 @@ import asyncio
 import copy
 import json
 import urllib.parse
-from typing import TYPE_CHECKING, Any, Callable, Dict, Union, Optional
+from typing import Any, Callable, Dict, Union, Optional
 
 import httpx
-from playwright.async_api import BrowserContext
+from playwright.async_api import BrowserContext, Page
 
-from base.base_crawler import AbstractApiClient
-from proxy.proxy_mixin import ProxyRefreshMixin
+from base.base_client import BasePlatformClient
 from tools import utils
 from tools.httpx_util import make_async_client
 from var import request_keyword_var
-
-if TYPE_CHECKING:
-    from proxy.proxy_ip_pool import ProxyIpPool
 
 from .exception import *
 from .field import *
 from .help import *
 
 
-class DouYinClient(AbstractApiClient, ProxyRefreshMixin):
+class DouYinClient(BasePlatformClient):
 
     def __init__(
         self,
-        timeout=60,  # If the crawl media option is turned on, Douyin’s short videos will require a longer timeout.
+        timeout=60,  # If the crawl media option is turned on, Douyin's short videos will require a longer timeout.
         proxy=None,
         *,
         headers: Dict,
         playwright_page: Optional[Page],
         cookie_dict: Dict,
-        proxy_ip_pool: Optional["ProxyIpPool"] = None,
+        proxy_ip_pool=None,
     ):
-        self.proxy = proxy
-        self.timeout = timeout
-        self.headers = headers
+        super().__init__(
+            timeout, proxy,
+            headers=headers,
+            playwright_page=playwright_page,
+            cookie_dict=cookie_dict,
+            proxy_ip_pool=proxy_ip_pool,
+        )
         self._host = "https://www.douyin.com"
         self.cookie_urls = [
             "https://douyin.com",
@@ -63,10 +63,6 @@ class DouYinClient(AbstractApiClient, ProxyRefreshMixin):
             "https://douhot.douyin.com",
             "https://live.douyin.com",
         ]
-        self.playwright_page = playwright_page
-        self.cookie_dict = cookie_dict
-        # Initialize proxy pool (from ProxyRefreshMixin)
-        self.init_proxy_pool(proxy_ip_pool)
 
     async def __process_req_params(
         self,
@@ -120,12 +116,7 @@ class DouYinClient(AbstractApiClient, ProxyRefreshMixin):
             a_bogus = await get_a_bogus(uri, query_string, post_data, headers["User-Agent"], self.playwright_page)
             params["a_bogus"] = a_bogus
 
-    async def request(self, method, url, **kwargs):
-        # Check whether the proxy has expired before each request
-        await self._refresh_proxy_if_expired()
-
-        async with make_async_client(proxy=self.proxy) as client:
-            response = await client.request(method, url, timeout=self.timeout, **kwargs)
+    def _parse_response(self, response) -> Any:
         try:
             if response.text == "" or response.text == "blocked":
                 utils.logger.error(f"request params incrr, response.text: {response.text}")
@@ -157,14 +148,6 @@ class DouYinClient(AbstractApiClient, ProxyRefreshMixin):
             urls=self.cookie_urls,
         )
         return cookie_dict.get("LOGIN_STATUS") == "1"
-
-    async def update_cookies(self, browser_context: BrowserContext, urls: Optional[list[str]] = None):
-        cookie_str, cookie_dict = await utils.convert_browser_context_cookies(
-            browser_context,
-            urls=urls or self.cookie_urls,
-        )
-        self.headers["Cookie"] = cookie_str
-        self.cookie_dict = cookie_dict
 
     async def search_info_by_keyword(
         self,
@@ -345,18 +328,7 @@ class DouYinClient(AbstractApiClient, ProxyRefreshMixin):
         return result
 
     async def get_aweme_media(self, url: str) -> Union[bytes, None]:
-        async with make_async_client(proxy=self.proxy) as client:
-            try:
-                response = await client.request("GET", url, timeout=self.timeout, follow_redirects=True)
-                response.raise_for_status()
-                if not response.reason_phrase == "OK":
-                    utils.logger.error(f"[DouYinClient.get_aweme_media] request {url} err, res:{response.text}")
-                    return None
-                else:
-                    return response.content
-            except httpx.HTTPError as exc:  # some wrong when call httpx.request method, such as connection error, client error, server error or response status code is not 2xx
-                utils.logger.error(f"[DouYinClient.get_aweme_media] {exc.__class__.__name__} for {exc.request.url} - {exc}")  # Keep the original exception type name for developers to debug
-                return None
+        return await self.download_media(url)
 
     async def resolve_short_url(self, short_url: str) -> str:
         """

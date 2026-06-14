@@ -21,26 +21,22 @@
 # -*- coding: utf-8 -*-
 import asyncio
 import json
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
+from typing import Callable, Dict, List, Optional
 from urllib.parse import urlencode
 
-import httpx
-from playwright.async_api import BrowserContext, Page
+from playwright.async_api import Page
 
-import config
-from base.base_crawler import AbstractApiClient
-from proxy.proxy_mixin import ProxyRefreshMixin
-from tools import utils
 from tools.httpx_util import make_async_client
 
-if TYPE_CHECKING:
-    from proxy.proxy_ip_pool import ProxyIpPool
+import config
+from base.base_client import BasePlatformClient
+from tools import utils
 
 from .exception import DataFetchError
 from .graphql import KuaiShouGraphQL
 
 
-class KuaiShouClient(AbstractApiClient, ProxyRefreshMixin):
+class KuaiShouClient(BasePlatformClient):
     def __init__(
         self,
         timeout=10,
@@ -49,31 +45,25 @@ class KuaiShouClient(AbstractApiClient, ProxyRefreshMixin):
         headers: Dict[str, str],
         playwright_page: Page,
         cookie_dict: Dict[str, str],
-        proxy_ip_pool: Optional["ProxyIpPool"] = None,
+        proxy_ip_pool=None,
     ):
-        self.proxy = proxy
-        self.timeout = timeout
-        self.headers = headers
+        super().__init__(
+            timeout, proxy,
+            headers=headers,
+            playwright_page=playwright_page,
+            cookie_dict=cookie_dict,
+            proxy_ip_pool=proxy_ip_pool,
+        )
         self._host = "https://www.kuaishou.com/graphql"
         self._rest_host = "https://www.kuaishou.com"
         self.cookie_urls = [self._rest_host]
-        self.playwright_page = playwright_page
-        self.cookie_dict = cookie_dict
         self.graphql = KuaiShouGraphQL()
-        # Initialize proxy pool (from ProxyRefreshMixin)
-        self.init_proxy_pool(proxy_ip_pool)
 
-    async def request(self, method, url, **kwargs) -> Any:
-        # Check if proxy is expired before each request
-        await self._refresh_proxy_if_expired()
-
-        async with make_async_client(proxy=self.proxy) as client:
-            response = await client.request(method, url, timeout=self.timeout, **kwargs)
+    def _parse_response(self, response) -> Dict:
         data: Dict = response.json()
         if data.get("errors"):
             raise DataFetchError(data.get("errors", "unkonw error"))
-        else:
-            return data.get("data", {})
+        return data.get("data", {})
 
     async def get(self, uri: str, params=None) -> Dict:
         final_uri = uri
@@ -133,14 +123,6 @@ class KuaiShouClient(AbstractApiClient, ProxyRefreshMixin):
             )
             ping_flag = False
         return ping_flag
-
-    async def update_cookies(self, browser_context: BrowserContext, urls: Optional[list[str]] = None):
-        cookie_str, cookie_dict = await utils.convert_browser_context_cookies(
-            browser_context,
-            urls=urls or self.cookie_urls,
-        )
-        self.headers["Cookie"] = cookie_str
-        self.cookie_dict = cookie_dict
 
     async def search_info_by_keyword(
         self, keyword: str, pcursor: str, search_session_id: str = ""

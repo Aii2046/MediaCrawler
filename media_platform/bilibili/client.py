@@ -24,27 +24,22 @@
 import asyncio
 import json
 import random
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 from urllib.parse import urlencode
 
-import httpx
 from playwright.async_api import BrowserContext, Page
 from tools.httpx_util import make_async_client
 
 import config
-from base.base_crawler import AbstractApiClient
-from proxy.proxy_mixin import ProxyRefreshMixin
+from base.base_client import BasePlatformClient
 from tools import utils
-
-if TYPE_CHECKING:
-    from proxy.proxy_ip_pool import ProxyIpPool
 
 from .exception import DataFetchError
 from .field import CommentOrderType, SearchOrderType
 from .help import BilibiliSign
 
 
-class BilibiliClient(AbstractApiClient, ProxyRefreshMixin):
+class BilibiliClient(BasePlatformClient):
 
     def __init__(
         self,
@@ -54,24 +49,19 @@ class BilibiliClient(AbstractApiClient, ProxyRefreshMixin):
         headers: Dict[str, str],
         playwright_page: Page,
         cookie_dict: Dict[str, str],
-        proxy_ip_pool: Optional["ProxyIpPool"] = None,
+        proxy_ip_pool=None,
     ):
-        self.proxy = proxy
-        self.timeout = timeout
-        self.headers = headers
+        super().__init__(
+            timeout, proxy,
+            headers=headers,
+            playwright_page=playwright_page,
+            cookie_dict=cookie_dict,
+            proxy_ip_pool=proxy_ip_pool,
+        )
         self._host = "https://api.bilibili.com"
         self.cookie_urls = ["https://www.bilibili.com"]
-        self.playwright_page = playwright_page
-        self.cookie_dict = cookie_dict
-        # Initialize proxy pool (from ProxyRefreshMixin)
-        self.init_proxy_pool(proxy_ip_pool)
 
-    async def request(self, method, url, **kwargs) -> Any:
-        # Check if proxy has expired before each request
-        await self._refresh_proxy_if_expired()
-
-        async with make_async_client(proxy=self.proxy) as client:
-            response = await client.request(method, url, timeout=self.timeout, **kwargs)
+    def _parse_response(self, response) -> Any:
         try:
             data: Dict = response.json()
         except json.JSONDecodeError:
@@ -146,14 +136,6 @@ class BilibiliClient(AbstractApiClient, ProxyRefreshMixin):
             ping_flag = False
         return ping_flag
 
-    async def update_cookies(self, browser_context: BrowserContext, urls: Optional[list[str]] = None):
-        cookie_str, cookie_dict = await utils.convert_browser_context_cookies(
-            browser_context,
-            urls=urls or self.cookie_urls,
-        )
-        self.headers["Cookie"] = cookie_str
-        self.cookie_dict = cookie_dict
-
     async def search_video_by_keyword(
         self,
         keyword: str,
@@ -226,20 +208,7 @@ class BilibiliClient(AbstractApiClient, ProxyRefreshMixin):
         return await self.get(uri, params, enable_params_sign=True)
 
     async def get_video_media(self, url: str) -> Union[bytes, None]:
-        # Follow CDN 302 redirects and treat any 2xx as success (some endpoints return 206)
-        async with make_async_client(proxy=self.proxy, follow_redirects=True) as client:
-            try:
-                response = await client.request("GET", url, timeout=self.timeout, headers=self.headers)
-                response.raise_for_status()
-                if 200 <= response.status_code < 300:
-                    return response.content
-                utils.logger.error(
-                    f"[BilibiliClient.get_video_media] Unexpected status {response.status_code} for {url}"
-                )
-                return None
-            except httpx.HTTPError as exc:  # some wrong when call httpx.request method, such as connection error, client error, server error or response status code is not 2xx
-                utils.logger.error(f"[BilibiliClient.get_video_media] {exc.__class__.__name__} for {exc.request.url} - {exc}")  # Keep original exception type name for developer debugging
-                return None
+        return await self.download_media(url, extra_headers=self.headers)
 
     async def get_video_comments(
         self,

@@ -28,7 +28,7 @@ from playwright.async_api import BrowserContext, Page
 from tenacity import RetryError, retry, stop_after_attempt, wait_fixed
 
 import config
-from base.base_crawler import AbstractApiClient
+from base.base_client import BasePlatformClient
 from model.m_baidu_tieba import TiebaComment, TiebaCreator, TiebaNote
 from proxy.proxy_ip_pool import ProxyIpPool
 from tools import utils
@@ -39,28 +39,33 @@ from .help import TieBaExtractor
 PC_SIGN_SECRET = "36770b1f34c9bbf2e7d1a99d2b82fa9e"
 
 
-class BaiduTieBaClient(AbstractApiClient):
+class BaiduTieBaClient(BasePlatformClient):
 
     def __init__(
         self,
         timeout=10,
-        ip_pool=None,
-        default_ip_proxy=None,
-        headers: Dict[str, str] = None,
+        proxy=None,
+        *,
+        headers: Optional[Dict[str, str]] = None,
         playwright_page: Optional[Page] = None,
+        cookie_dict: Optional[Dict[str, str]] = None,
+        proxy_ip_pool: Optional[ProxyIpPool] = None,
     ):
-        self.ip_pool: Optional[ProxyIpPool] = ip_pool
-        self.timeout = timeout
-        # Use provided headers (including real browser UA) or default headers
-        self.headers = headers or {
-            "User-Agent": utils.get_user_agent(),
-            "Cookie": "",
-        }
+        super().__init__(
+            timeout, proxy,
+            headers=headers or {
+                "User-Agent": utils.get_user_agent(),
+                "Cookie": "",
+            },
+            playwright_page=playwright_page,
+            cookie_dict=cookie_dict or {},
+            proxy_ip_pool=proxy_ip_pool,
+        )
         self._host = "https://tieba.baidu.com"
         self.cookie_urls = [self._host]
         self._page_extractor = TieBaExtractor()
-        self.default_ip_proxy = default_ip_proxy
-        self.playwright_page = playwright_page  # Playwright page object
+        # Tieba also uses a separate sync proxy string for requests library
+        self.default_ip_proxy = proxy
         self._pc_tbs = ""
 
     @staticmethod
@@ -215,19 +220,28 @@ class BaiduTieBaClient(AbstractApiClient):
         )
         return response
 
+    def _parse_response(self, response) -> Any:
+        """Tieba uses sync requests, so this is not used. Kept for abstract method compliance."""
+        return response.json()
+
     async def _refresh_proxy_if_expired(self) -> None:
         """
-        Check if proxy is expired and automatically refresh if necessary
+        Override to also update default_ip_proxy for sync requests.
         """
-        if self.ip_pool is None:
+        if self._proxy_ip_pool is None:
             return
 
-        if self.ip_pool.is_current_proxy_expired():
+        if self._proxy_ip_pool.is_current_proxy_expired():
             utils.logger.info(
                 "[BaiduTieBaClient._refresh_proxy_if_expired] Proxy expired, refreshing..."
             )
-            new_proxy = await self.ip_pool.get_or_refresh_proxy()
-            # Update proxy URL
+            new_proxy = await self._proxy_ip_pool.get_or_refresh_proxy()
+            # Update async proxy URL (for base class / httpx)
+            if new_proxy.user and new_proxy.password:
+                self.proxy = f"http://{new_proxy.user}:{new_proxy.password}@{new_proxy.ip}:{new_proxy.port}"
+            else:
+                self.proxy = f"http://{new_proxy.ip}:{new_proxy.port}"
+            # Update sync proxy URL (for requests library)
             _, self.default_ip_proxy = utils.format_proxy_info(new_proxy)
             utils.logger.info(
                 f"[BaiduTieBaClient._refresh_proxy_if_expired] New proxy: {new_proxy.ip}:{new_proxy.port}"
@@ -294,8 +308,8 @@ class BaiduTieBaClient(AbstractApiClient):
             res = await self.request(method="GET", url=f"{self._host}{final_uri}", return_ori_content=return_ori_content, **kwargs)
             return res
         except RetryError as e:
-            if self.ip_pool:
-                proxie_model = await self.ip_pool.get_proxy()
+            if self._proxy_ip_pool:
+                proxie_model = await self._proxy_ip_pool.get_proxy()
                 _, proxy = utils.format_proxy_info(proxie_model)
                 res = await self.request(method="GET", url=f"{self._host}{final_uri}", return_ori_content=return_ori_content, proxy=proxy, **kwargs)
                 self.default_ip_proxy = proxy
@@ -355,22 +369,6 @@ class BaiduTieBaClient(AbstractApiClient):
         except Exception as e:
             utils.logger.error(f"[BaiduTieBaClient.pong] Check login state failed: {e}, assume not logged in")
             return False
-
-    async def update_cookies(self, browser_context: BrowserContext, urls: Optional[list[str]] = None):
-        """
-        Update cookies method provided by API client, usually called after successful login
-        Args:
-            browser_context: Browser context object
-
-        Returns:
-
-        """
-        cookie_str, cookie_dict = await utils.convert_browser_context_cookies(
-            browser_context,
-            urls=urls or self.cookie_urls,
-        )
-        self.headers["Cookie"] = cookie_str
-        utils.logger.info("[BaiduTieBaClient.update_cookies] Cookie has been updated")
 
     async def get_notes_by_keyword(
         self,
